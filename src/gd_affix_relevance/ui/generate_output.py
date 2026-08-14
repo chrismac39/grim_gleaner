@@ -64,7 +64,7 @@ class GenerateOutputPage(QWidget):
 
         explanation = QLabel(
             "Export Grades applies the active profile's affix and unique-item "
-            "grades directly to Grim Dawn's item names. Existing Rainbow item "
+            "grades directly to Grim Dawn's item names. Existing installed item-tag "
             "files are retained as the source, while Grim Gleaner's bundled "
             "files supply anything missing. Before the first export, the "
             "current text_en folder is backed up so it can be restored here.",

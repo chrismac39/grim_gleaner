@@ -48,13 +48,13 @@ There are three tabbed subsections:
 - Add-ons will show your the 5 highest-graded Components and Augments for each item slot and their sources. It also has an optional "Resistance Cap Mode" that lets you easily target specific resistances that you need to cap.
 4. **Export to in-game tags**\
 **Important**: Any time you want to export grades, make sure the game is closed! Also, if you replace or remove the files in your /Grim Dawn/settings/text_en folder, you need to run the export again.\
-Click over to the "Export Grades" sections from the sidebar, then click "Export Grades." This will automatically backup the files in your /Grim Dawn/settings/text_en folder, if they are there. (These files are used for things like Rainbow Filter/gdse). Grim Gleaner *should* be fully compatible and add it's tags while preserving any color/text changes from Rainbow Filter and similar mods. (**Note**: Since Grim Gleaner uses "S" in it's grading and Rainbow uses "S" for set items, Grim Gleaner will replace Rainbow's set notation with "$" for clarity.)
+Click over to the "Export Grades" sections from the sidebar, then click "Export Grades." The Python-native export engine automatically backs up your existing /Grim Dawn/settings/text_en folder, preserves installed item-tag files (including Rainbow/gdse style edits), and fills any missing files from Grim Gleaner's bundled tags. (**Note**: Since Grim Gleaner uses "S" in it's grading and Rainbow uses "S" for set items, Grim Gleaner will replace Rainbow's set notation with "$" for clarity.)
 
-Rainbow Filter or gdse are recommended but not required. Find them below:\
+Rainbow Filter or gdse remain optional compatibility inputs. Find them below:\
 [Rainbow Filter](https://forums.crateentertainment.com/t/tool-rainbow-filter-item-highlighting/42765)\
 [gdse](https://forums.crateentertainment.com/t/tool-gdse-a-light-weight-fully-automated-alternative-to-rainbow-filter/156183)
 
-See the "Guide" section in the UI for more information.
+See the "Guide" and "Palette Logic" sections in the UI for more information.
 
 #### Weighting Tips
 

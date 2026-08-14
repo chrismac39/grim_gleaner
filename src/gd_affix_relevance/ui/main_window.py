@@ -29,6 +29,7 @@ from gd_affix_relevance.profile_store import load_profile
 from gd_affix_relevance.runtime_paths import RuntimePaths, resolve_runtime_paths
 from gd_affix_relevance.ui.generate_output import GenerateOutputPage
 from gd_affix_relevance.ui.guide import GuidePage
+from gd_affix_relevance.ui.palette_logic import PaletteLogicPage
 from gd_affix_relevance.ui.profile_editor import ProfileEditor
 from gd_affix_relevance.ui.settings import SettingsPage
 from gd_affix_relevance.ui.top_matches import TopMatchesPage
@@ -209,6 +210,16 @@ class MainWindow(QMainWindow):
             "Guide",
             "How to use Grim Gleaner and understand its limitations",
             self.guide_page_index,
+        )
+
+        self.palette_logic_page = PaletteLogicPage(self.pages)
+        self.palette_logic_page_index = self.pages.addWidget(
+            self.palette_logic_page
+        )
+        self.palette_logic_navigation_row = self._add_navigation_item(
+            "Palette Logic",
+            "Default colors, palette keys, and customization notes",
+            self.palette_logic_page_index,
         )
 
         self.profile_editor.profile_changed.connect(self.top_matches_page.refresh)
