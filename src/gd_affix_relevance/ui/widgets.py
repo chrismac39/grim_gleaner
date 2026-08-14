@@ -268,7 +268,7 @@ class PackageModifyControl(QWidget):
         self.decrement_button.setToolTip("Decrease every stat in this package")
         self.decrement_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.decrement_button.setAutoRepeat(True)
-        self.decrement_button.pressed.connect(self._emit_decrement_requested)
+        self.decrement_button.pressed.connect(self.decrement)
         layout.addWidget(self.decrement_button)
 
         self.star_buttons: list[QToolButton] = []
@@ -290,13 +290,13 @@ class PackageModifyControl(QWidget):
         self.increment_button.setToolTip("Increase every stat in this package")
         self.increment_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.increment_button.setAutoRepeat(True)
-        self.increment_button.pressed.connect(self._emit_increment_requested)
+        self.increment_button.pressed.connect(self.increment)
         layout.addWidget(self.increment_button)
 
-    def _emit_increment_requested(self) -> None:
+    def increment(self) -> None:
         self.increment_requested.emit()
 
-    def _emit_decrement_requested(self) -> None:
+    def decrement(self) -> None:
         self.decrement_requested.emit()
 
     def refresh(self, values: tuple[int, ...]) -> None:
