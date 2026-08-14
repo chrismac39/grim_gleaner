@@ -102,6 +102,7 @@ def test_export_sources_use_bundled_tags_when_game_has_none(tmp_path: Path) -> N
     text_root.mkdir(parents=True)
     (text_root / "unrelated.txt").write_text("tag=value\n", encoding="utf-8")
     bundled = tmp_path / "app" / "tags"
+    bundled.mkdir(parents=True)
 
     selection = resolve_export_sources(game, bundled)
 
@@ -118,6 +119,7 @@ def test_export_sources_prefer_installed_tags_with_bundled_fallback(
     text_root.mkdir(parents=True)
     (text_root / "tags_items.txt").write_text("tag=value\n", encoding="utf-8")
     bundled = tmp_path / "app" / "tags"
+    bundled.mkdir(parents=True)
 
     selection = resolve_export_sources(game, bundled)
 
@@ -125,3 +127,17 @@ def test_export_sources_prefer_installed_tags_with_bundled_fallback(
     assert selection.fallback_root == bundled.resolve()
     assert selection.game_files == ("tags_items.txt",)
     assert selection.uses_game_files
+
+
+def test_export_sources_skip_missing_bundled_fallback(tmp_path: Path) -> None:
+    game = tmp_path / "Grim Dawn"
+    text_root = game / "settings" / "text_en"
+    text_root.mkdir(parents=True)
+    (text_root / "tags_items.txt").write_text("tag=value\n", encoding="utf-8")
+    bundled = tmp_path / "app" / "tags"
+
+    selection = resolve_export_sources(game, bundled)
+
+    assert selection.primary_root == text_root.resolve()
+    assert selection.fallback_root is None
+    assert selection.game_files == ("tags_items.txt",)
