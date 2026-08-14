@@ -182,7 +182,7 @@ def _run_compile_catalog(args: argparse.Namespace) -> int:
 def _run_generate_output(args: argparse.Namespace) -> int:
     bundle = CatalogBundle.load(args.catalog_root)
     profile = load_profile(args.profile_file)
-    palette = load_palette(args.palette_file)
+    palette = load_palette(args.palette_file) if args.palette_file else None
     result = generate_rainbow_output(
         args.source_root,
         args.output_dir,
@@ -190,14 +190,26 @@ def _run_generate_output(args: argparse.Namespace) -> int:
         profile,
         items=bundle.items,
         fallback_source_root=args.fallback_source_root,
-        marker_palette=marker_palette_from_values(palette.values),
+        marker_palette=marker_palette_from_values(
+            palette.values if palette is not None else None
+        ),
     )
     _print_json_summary(
         {
             "profile": profile.name,
-            "palette_source": str(palette.source) if palette.source else None,
-            "marker_generated_code": palette.values.get("marker.generated", "c"),
-            "marker_default_code": palette.values.get("marker.default", "e"),
+            "palette_source": (
+                str(palette.source) if palette is not None and palette.source else None
+            ),
+            "marker_generated_code": (
+                palette.values.get("marker.generated", "c")
+                if palette is not None
+                else "c"
+            ),
+            "marker_default_code": (
+                palette.values.get("marker.default", "e")
+                if palette is not None
+                else "e"
+            ),
             "files_written": result.files_written,
             "affix_tags_scored": result.affix_tags_scored,
             "affix_tags_found": result.affix_tags_found,

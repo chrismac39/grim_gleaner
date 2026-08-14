@@ -89,7 +89,7 @@ def test_export_page_installs_grades_and_restores_original(
 
     assert page.last_result is not None
     assert "About to apply grade tags to 1 affix and 0 unique item entries" in questions[0]
-    assert "tagHealthy={^C}(C1){^G}Rainbow Healthy" in (
+    assert "tagHealthy={^Y}(C1){^G}Rainbow Healthy" in (
         installed / "tags_items.txt"
     ).read_text(encoding="utf-8")
     assert page.restore_button.isEnabled()
@@ -130,7 +130,7 @@ def test_export_page_uses_bundled_tags_for_clean_install(
     page.generate()
 
     installed = game / "settings" / "text_en"
-    assert "tagHealthy=(C1)Bundled Healthy" in (
+    assert "tagHealthy={^Y}(C1){^E}Bundled Healthy" in (
         installed / "tags_items.txt"
     ).read_text(encoding="utf-8")
 

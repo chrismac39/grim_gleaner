@@ -16,7 +16,7 @@ from gd_affix_relevance.output import (
     generate_rainbow_output,
     marker_palette_from_values,
 )
-from gd_affix_relevance.palette_config import default_palette, load_palette
+from gd_affix_relevance.palette_config import load_palette
 from gd_affix_relevance.runtime_paths import resolve_export_sources
 
 BACKUP_SCHEMA_VERSION = 1
@@ -85,11 +85,7 @@ def export_grades_to_game(
         raise ValueError("staging and Grim Dawn text_en paths must not overlap")
 
     stage.parent.mkdir(parents=True, exist_ok=True)
-    palette_values = (
-        load_palette(palette_file).values
-        if palette_file is not None
-        else default_palette()
-    )
+    palette_values = load_palette(palette_file).values if palette_file is not None else None
     temporary = Path(tempfile.mkdtemp(prefix=".grade-export-", dir=stage.parent))
     try:
         generated = temporary / "text_en"

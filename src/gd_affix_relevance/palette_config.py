@@ -28,6 +28,15 @@ DEFAULT_PALETTE: dict[str, str] = {
     # Export-only controls for grade marker insertion.
     "marker.generated": "c",
     "marker.default": "e",
+    # Grade-specific marker colors.
+    "grade.f": "r",
+    "grade.d": "o",
+    "grade.c": "y",
+    "grade.b": "g",
+    "grade.a": "t",
+    "grade.s": "c",
+    "grade.s_plus": "b",
+    "grade.s_plusplus": "p",
 }
 
 KNOWN_KEYS = frozenset(
@@ -64,6 +73,14 @@ KNOWN_KEYS = frozenset(
         "nondamage.total_damage",
         "marker.generated",
         "marker.default",
+        "grade.f",
+        "grade.d",
+        "grade.c",
+        "grade.b",
+        "grade.a",
+        "grade.s",
+        "grade.s_plus",
+        "grade.s_plusplus",
     }
 )
 

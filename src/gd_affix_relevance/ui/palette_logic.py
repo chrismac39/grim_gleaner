@@ -138,6 +138,19 @@ _SECTION_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "marker.default",
         ),
     ),
+    (
+        "Grade colors",
+        (
+            "grade.f",
+            "grade.d",
+            "grade.c",
+            "grade.b",
+            "grade.a",
+            "grade.s",
+            "grade.s_plus",
+            "grade.s_plusplus",
+        ),
+    ),
 )
 
 _ENGINE_DEFAULT_CODES: dict[str, str] = {
@@ -203,6 +216,15 @@ class PaletteLogicPage(QWidget):
         introduction.setWordWrap(True)
         layout.addWidget(introduction)
 
+        tip = QLabel(
+            "Tip: dropdowns show color letters with names. Example: damage.chaos = "
+            "p (Purple). Use Save Palette after making changes.",
+            self,
+        )
+        tip.setObjectName("pageHint")
+        tip.setWordWrap(True)
+        layout.addWidget(tip)
+
         self.palette_path = QLabel(self)
         self.palette_path.setObjectName("pageHint")
         self.palette_path.setWordWrap(True)
@@ -238,15 +260,6 @@ class PaletteLogicPage(QWidget):
 
         for section_title, keys in _SECTION_KEYS:
             self._add_selector_section(content_layout, section_title, keys, content)
-
-        note = QLabel(
-            "Tip: dropdowns show color letters with names. Example: damage.chaos = "
-            "p (Purple). Use Save Palette after making changes.",
-            content,
-        )
-        note.setObjectName("pageHint")
-        note.setWordWrap(True)
-        content_layout.addWidget(note)
 
         content_layout.addStretch()
         scroll.setWidget(content)

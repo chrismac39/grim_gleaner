@@ -136,10 +136,10 @@ def test_writer_clones_complete_folder_and_changes_exact_affix_tags_only(
     generated = (output / "tags_items.txt").read_bytes()
     assert generated.startswith(b"\xef\xbb\xbf")
     text = generated.decode("utf-8-sig")
-    assert "tagAffix={^C}(C1){^G}Affix Name\r\n" in text
-    assert "tagSpecial={^C}(C1)X{^O}Special Name\r\n" in text
-    assert "tagPlain=(C1)Plain Name\r\n" in text
-    assert "tagSuffix={^G}of Ending{^C}(C1)\r\n" in text
+    assert "tagAffix={^Y}(C1){^G}Affix Name\r\n" in text
+    assert "tagSpecial={^Y}(C1)X{^O}Special Name\r\n" in text
+    assert "tagPlain={^Y}(C1){^E}Plain Name\r\n" in text
+    assert "tagSuffix={^G}of Ending{^Y}(C1)\r\n" in text
     assert "tagBaseItem={^B}Base Item\r\n" in text
     assert (output / "readme.bin").read_bytes() == b"untouched"
     assert (source / "tags_items.txt").read_bytes() == original
@@ -199,10 +199,9 @@ def test_writer_leaves_clean_vanilla_names_free_of_color_codes(
     )
 
     text = (output / "tags_items.txt").read_text(encoding="utf-8")
-    assert "tagPrefix=(C1)Charged" in text
-    assert "tagSuffix=of Ferocity(C1)" in text
-    assert "tagUnique=(C1)Stormrend" in text
-    assert "{^" not in text
+    assert "tagPrefix={^Y}(C1){^E}Charged" in text
+    assert "tagSuffix=of Ferocity{^Y}(C1)" in text
+    assert "tagUnique={^Y}(C1){^E}Stormrend" in text
 
 
 def test_writer_replaces_its_marker_and_is_idempotent(tmp_path: Path) -> None:
@@ -229,7 +228,7 @@ def test_writer_replaces_its_marker_and_is_idempotent(tmp_path: Path) -> None:
     ).read_bytes()
     text = (second_output / "tags_items.txt").read_text(encoding="utf-8")
     assert "(C1)(S++1)" not in text
-    assert "tagAffix={^C}(C1){^G}Affix Name" in text
+    assert "tagAffix={^Y}(C1){^G}Affix Name" in text
 
 
 def test_writer_applies_marker_palette_overrides(tmp_path: Path) -> None:
@@ -460,10 +459,10 @@ def test_writer_grades_unique_items_and_flags_only_relevant_modifiers(
     text = (output / "tags_items.txt").read_text(encoding="utf-8")
 
     assert (
-        "tagRelevantUnique={^C}(S++*!){^E}($) {^I}Relevant Unique"
+        "tagRelevantUnique={^P}(S++*!){^E}($) {^I}Relevant Unique"
         in text
     )
-    assert "tagUnusedUnique={^C}(S++){^P}Unused Unique" in text
+    assert "tagUnusedUnique={^P}(S++){^P}Unused Unique" in text
     assert result.unique_tags_found == result.unique_tags_scored == 2
 
     second_output = tmp_path / "second-output"

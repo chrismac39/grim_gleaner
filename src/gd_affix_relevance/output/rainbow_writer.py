@@ -28,6 +28,7 @@ GENERATED_MARKER_PATTERN = re.compile(
 RAINBOW_SET_MARKER_PATTERN = re.compile(
     r"^(?P<leading>\s*)(?:\{\^E\})?\((?:S|\$)\)"
 )
+GRADE_TOKEN_PATTERN = re.compile(r"^\((S\+\+|S\+|S|A|B|C|D|F|-|—)")
 MARKER_COLOR = "{^C}"
 DEFAULT_COLOR = "{^E}"
 
@@ -36,6 +37,7 @@ DEFAULT_COLOR = "{^E}"
 class MarkerPalette:
     generated_color_code: str
     default_color_code: str
+    grade_color_codes: Mapping[str, str]
 
     @property
     def generated_color(self) -> str:
@@ -44,6 +46,11 @@ class MarkerPalette:
     @property
     def default_color(self) -> str:
         return f"{{^{self.default_color_code.upper()}}}"
+
+    def color_for_grade(self, marker: str) -> str:
+        token = _grade_token(marker)
+        code = self.grade_color_codes.get(token, self.generated_color_code)
+        return f"{{^{code.upper()}}}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,12 +87,39 @@ class RainbowGenerationResult:
 def marker_palette_from_values(
     values: Mapping[str, str] | None = None,
 ) -> MarkerPalette:
-    merged = default_palette()
+    defaults = default_palette()
+    merged = dict(defaults)
     if values is not None:
         merged.update(values)
+    raw_values = values or {}
+
+    def _grade_code(key: str) -> str:
+        if key in raw_values:
+            if (
+                "marker.generated" in raw_values
+                and raw_values.get(key) == defaults.get(key)
+            ):
+                return merged.get("marker.generated", "c")
+            return merged.get(key, merged.get("marker.generated", "c"))
+        if "marker.generated" in raw_values:
+            return merged.get("marker.generated", "c")
+        return merged.get(key, merged.get("marker.generated", "c"))
+
     return MarkerPalette(
         generated_color_code=merged.get("marker.generated", "c"),
         default_color_code=merged.get("marker.default", "e"),
+        grade_color_codes={
+            "F": _grade_code("grade.f"),
+            "D": _grade_code("grade.d"),
+            "C": _grade_code("grade.c"),
+            "B": _grade_code("grade.b"),
+            "A": _grade_code("grade.a"),
+            "S": _grade_code("grade.s"),
+            "S+": _grade_code("grade.s_plus"),
+            "S++": _grade_code("grade.s_plusplus"),
+            "-": _grade_code("grade.f"),
+            "—": _grade_code("grade.f"),
+        },
     )
 
 
@@ -349,36 +383,40 @@ def _replace_generated_marker(
         marker_palette,
     )
     has_explicit_color = COLOR_CODE_PATTERN.search(clean_value) is not None
+    marker_color = marker_palette.color_for_grade(instruction.marker)
     if instruction.placement == "suffix":
-        marker_color = marker_palette.generated_color if has_explicit_color else ""
         return f"{clean_value}{marker_color}{instruction.marker}"
-    marker_color = marker_palette.generated_color if has_explicit_color else ""
-    return f"{marker_color}{instruction.marker}{clean_value}"
+    if has_explicit_color:
+        return f"{marker_color}{instruction.marker}{clean_value}"
+    return (
+        f"{marker_color}{instruction.marker}"
+        f"{marker_palette.default_color}{clean_value}"
+    )
 
 
 def _strip_generated_marker(value: str, marker_palette: MarkerPalette) -> str:
-    generated_color = marker_palette.generated_color
-    default_color = marker_palette.default_color
     existing = next(
-        (
-            match
-            for match in GENERATED_MARKER_PATTERN.finditer(value)
-            if match.group() != "(S)"
-            or value[
-                max(0, match.start() - len(generated_color)) : match.start()
-            ]
-            == generated_color
-        ),
+        (match for match in GENERATED_MARKER_PATTERN.finditer(value) if match.group() != "(S)"),
         None,
     )
     if existing is None:
         return value
     start, end = existing.span()
-    if value[max(0, start - len(generated_color)) : start] == generated_color:
-        start -= len(generated_color)
-    if value[end : end + len(default_color)] == default_color:
-        end += len(default_color)
+    if start >= 4 and re.fullmatch(r"\{\^[A-Za-z]\}", value[start - 4 : start]):
+        start -= 4
+    if (
+        end + 4 <= len(value)
+        and value[end : end + 4] == marker_palette.default_color
+    ):
+        end += 4
     return value[:start] + value[end:]
+
+
+def _grade_token(marker: str) -> str:
+    match = GRADE_TOKEN_PATTERN.match(marker)
+    if not match:
+        return "C"
+    return match.group(1)
 
 
 def _normalize_rainbow_set_marker(
