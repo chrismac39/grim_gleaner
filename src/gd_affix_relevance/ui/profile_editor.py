@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Signal
+from PySide6.QtCore import QSettings, QSignalBlocker, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -41,9 +41,11 @@ class ProfileEditor(QWidget):
         profile_path: Path | None = None,
         profiles_root: Path | None = None,
         startup_notice: str = "",
+        settings: QSettings | None = None,
     ) -> None:
         super().__init__(parent)
         self.profile = profile or BuildProfile()
+        self.settings = settings
         self.accordions: dict[str, PackageAccordion] = {}
         self.current_profile_path = Path(profile_path) if profile_path else None
         self.profiles_root = (

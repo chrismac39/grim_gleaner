@@ -240,6 +240,7 @@ def test_startup_game_folder_prompt_runs_once_and_opens_settings(
     )
     window = MainWindow(catalog=AffixCatalog(()), settings=settings)
     prompts: list[bool] = []
+    window.settings_page.has_valid_game_folder = lambda: False
     window.settings_page.prompt_for_game_folder = lambda: prompts.append(True) or False
 
     window.prompt_for_game_folder_if_needed()

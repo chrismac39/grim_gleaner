@@ -473,3 +473,5 @@ def _mastery_sort_key(mastery_id: str) -> tuple[int, str]:
         return int(suffix), mastery_id
     except ValueError:
         return 999, mastery_id
+
+
