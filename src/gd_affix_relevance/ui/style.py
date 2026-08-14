@@ -344,8 +344,8 @@ QToolButton#weightArrow {
     background: #292e37;
     border: 1px solid #3a414d;
     border-radius: 4px;
-    min-width: 25px;
-    min-height: 25px;
+    min-width: 29px;
+    min-height: 29px;
 }
 QToolButton#weightArrow:hover { background: #39404c; }
 QToolButton#weightArrow:disabled { color: #545965; background: #202329; }

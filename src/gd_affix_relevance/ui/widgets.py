@@ -46,7 +46,7 @@ class WeightControl(QWidget):
         self.decrement_button.setText("◀")
         self.decrement_button.setToolTip("Decrease weight")
         self.decrement_button.setAutoRepeat(True)
-        self.decrement_button.clicked.connect(self.decrement)
+        self.decrement_button.pressed.connect(self.decrement)
         layout.addWidget(self.decrement_button)
 
         self.star_buttons: list[QToolButton] = []
@@ -65,7 +65,7 @@ class WeightControl(QWidget):
         self.increment_button.setText("▶")
         self.increment_button.setToolTip("Increase weight")
         self.increment_button.setAutoRepeat(True)
-        self.increment_button.clicked.connect(self.increment)
+        self.increment_button.pressed.connect(self.increment)
         layout.addWidget(self.increment_button)
 
         self.set_value(value, emit=False)
@@ -266,7 +266,9 @@ class PackageModifyControl(QWidget):
         self.decrement_button.setObjectName("weightArrow")
         self.decrement_button.setText("◀")
         self.decrement_button.setToolTip("Decrease every stat in this package")
-        self.decrement_button.clicked.connect(self.decrement_requested)
+        self.decrement_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.decrement_button.setAutoRepeat(True)
+        self.decrement_button.pressed.connect(self._emit_decrement_requested)
         layout.addWidget(self.decrement_button)
 
         self.star_buttons: list[QToolButton] = []
@@ -286,8 +288,16 @@ class PackageModifyControl(QWidget):
         self.increment_button.setObjectName("weightArrow")
         self.increment_button.setText("▶")
         self.increment_button.setToolTip("Increase every stat in this package")
-        self.increment_button.clicked.connect(self.increment_requested)
+        self.increment_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.increment_button.setAutoRepeat(True)
+        self.increment_button.pressed.connect(self._emit_increment_requested)
         layout.addWidget(self.increment_button)
+
+    def _emit_increment_requested(self) -> None:
+        self.increment_requested.emit()
+
+    def _emit_decrement_requested(self) -> None:
+        self.decrement_requested.emit()
 
     def refresh(self, values: tuple[int, ...]) -> None:
         common = values[0] if values and len(set(values)) == 1 else None
