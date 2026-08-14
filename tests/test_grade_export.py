@@ -150,3 +150,35 @@ def test_restore_removes_generated_text_folder_for_clean_install(
 
     assert not restored.original_existed
     assert not exported.target_root.exists()
+
+
+def test_export_applies_palette_file_override_to_marker_color(
+    tmp_path: Path,
+) -> None:
+    game = tmp_path / "Grim Dawn"
+    game.mkdir()
+    (game / "Grim Dawn.exe").touch()
+    bundled = _bundled_tags(tmp_path)
+    (bundled / "tags_items.txt").write_text(
+        "tagHealthy={^G}Bundled Healthy\n",
+        encoding="utf-8",
+    )
+    staging = tmp_path / "app" / "staging" / "text_en"
+    backups = tmp_path / "app" / "backups"
+    palette_file = tmp_path / "grim-gleaner-palette.txt"
+    palette_file.write_text("marker.generated=h\n", encoding="utf-8")
+
+    export_grades_to_game(
+        game,
+        bundled,
+        staging,
+        backups,
+        _catalog(),
+        BuildProfile("Health", {"health": 4}),
+        palette_file=palette_file,
+    )
+
+    text = (game / "settings" / "text_en" / "tags_items.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "tagHealthy={^H}(C1){^G}Bundled Healthy" in text

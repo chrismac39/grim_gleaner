@@ -11,7 +11,12 @@ from pathlib import Path
 
 from gd_affix_relevance.catalog import AffixCatalog, ItemCatalog
 from gd_affix_relevance.domain import BuildProfile
-from gd_affix_relevance.output import RainbowGenerationResult, generate_rainbow_output
+from gd_affix_relevance.output import (
+    RainbowGenerationResult,
+    generate_rainbow_output,
+    marker_palette_from_values,
+)
+from gd_affix_relevance.palette_config import default_palette, load_palette
 from gd_affix_relevance.runtime_paths import resolve_export_sources
 
 BACKUP_SCHEMA_VERSION = 1
@@ -69,6 +74,7 @@ def export_grades_to_game(
     profile: BuildProfile,
     *,
     items: ItemCatalog | None = None,
+    palette_file: Path | None = None,
 ) -> GradeExportResult:
     """Generate, back up the original once, and install graded localization."""
 
@@ -79,6 +85,11 @@ def export_grades_to_game(
         raise ValueError("staging and Grim Dawn text_en paths must not overlap")
 
     stage.parent.mkdir(parents=True, exist_ok=True)
+    palette_values = (
+        load_palette(palette_file).values
+        if palette_file is not None
+        else default_palette()
+    )
     temporary = Path(tempfile.mkdtemp(prefix=".grade-export-", dir=stage.parent))
     try:
         generated = temporary / "text_en"
@@ -89,6 +100,7 @@ def export_grades_to_game(
             profile,
             items=items,
             fallback_source_root=selection.fallback_root,
+            marker_palette=marker_palette_from_values(palette_values),
         )
         _replace_directory(stage, generated)
     finally:

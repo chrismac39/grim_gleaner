@@ -24,7 +24,10 @@ from gd_affix_relevance.grade_export import (
     restore_game_backup,
 )
 from gd_affix_relevance.output import build_affix_markers, build_unique_item_markers
-from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING
+from gd_affix_relevance.ui.settings import (
+    GAME_FOLDER_SETTING,
+    PALETTE_FILE_SETTING,
+)
 
 LAST_EXPORTED_PROFILE_SETTING = "export/last_profile_name"
 
@@ -147,6 +150,7 @@ class GenerateOutputPage(QWidget):
                 self.catalog,
                 self.profile,
                 items=self.items,
+                palette_file=self._configured_palette_file(),
             )
         except (OSError, UnicodeError, ValueError) as error:
             QMessageBox.critical(self, "Could Not Export Grades", str(error))
@@ -238,6 +242,14 @@ class GenerateOutputPage(QWidget):
         raw_path = self.settings.value(GAME_FOLDER_SETTING, "", type=str).strip()
         if not raw_path:
             raise ValueError("Set the Grim Dawn folder on the Settings page first.")
+        return Path(raw_path)
+
+    def _configured_palette_file(self) -> Path | None:
+        if self.settings is None:
+            return None
+        raw_path = self.settings.value(PALETTE_FILE_SETTING, "", type=str).strip()
+        if not raw_path:
+            return None
         return Path(raw_path)
 
     def _last_exported_profile_name(self) -> str:

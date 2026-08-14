@@ -25,7 +25,7 @@ class PaletteLogicPage(QWidget):
         introduction = QLabel(
             "This page documents the default color choices used by Grim Gleaner "
             "when composing grade-aware item labels. The implementation is now "
-            "Python-native, while keeping compatibility with existing gdse-style "
+            "Python-native, while keeping compatibility with existing legacy "
             "palette key conventions.",
             self,
         )

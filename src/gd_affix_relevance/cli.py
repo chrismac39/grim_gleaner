@@ -34,8 +34,12 @@ from gd_affix_relevance.normalization.affix_reachability import (
     build_affix_reference_statuses,
     write_affix_reference_report,
 )
+from gd_affix_relevance.palette_config import load_palette
 from gd_affix_relevance.profile_store import load_profile
-from gd_affix_relevance.output import generate_rainbow_output
+from gd_affix_relevance.output import (
+    generate_rainbow_output,
+    marker_palette_from_values,
+)
 from gd_affix_relevance.release_assembly import assemble_release
 from gd_affix_relevance.runtime_paths import resolve_runtime_paths
 from gd_affix_relevance.scoring import (
@@ -178,6 +182,7 @@ def _run_compile_catalog(args: argparse.Namespace) -> int:
 def _run_generate_output(args: argparse.Namespace) -> int:
     bundle = CatalogBundle.load(args.catalog_root)
     profile = load_profile(args.profile_file)
+    palette = load_palette(args.palette_file)
     result = generate_rainbow_output(
         args.source_root,
         args.output_dir,
@@ -185,10 +190,14 @@ def _run_generate_output(args: argparse.Namespace) -> int:
         profile,
         items=bundle.items,
         fallback_source_root=args.fallback_source_root,
+        marker_palette=marker_palette_from_values(palette.values),
     )
     _print_json_summary(
         {
             "profile": profile.name,
+            "palette_source": str(palette.source) if palette.source else None,
+            "marker_generated_code": palette.values.get("marker.generated", "c"),
+            "marker_default_code": palette.values.get("marker.default", "e"),
             "files_written": result.files_written,
             "affix_tags_scored": result.affix_tags_scored,
             "affix_tags_found": result.affix_tags_found,
@@ -341,6 +350,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--fallback-source-root",
         type=Path,
         help="optional bundled source used for files absent from source-root",
+    )
+    generate.add_argument(
+        "--palette-file",
+        type=Path,
+        help=(
+            "optional key=value palette file; supports marker.generated "
+            "and marker.default for grade-marker color control"
+        ),
     )
     generate.add_argument("--output-dir", type=Path, required=True)
     generate.set_defaults(handler=_run_generate_output)

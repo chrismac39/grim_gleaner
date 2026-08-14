@@ -159,6 +159,39 @@ def test_export_page_requires_configured_game_folder(tmp_path: Path) -> None:
     assert "Set a valid Grim Dawn folder" in page.target_label.text()
 
 
+def test_export_page_uses_palette_file_override_for_marker_color(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _application()
+    bundled = tmp_path / "app" / "tags"
+    bundled.mkdir(parents=True)
+    (bundled / "tags_items.txt").write_text(
+        "tagHealthy={^G}Bundled Healthy\n",
+        encoding="utf-8",
+    )
+    palette_file = tmp_path / "grim-gleaner-palette.txt"
+    palette_file.write_text("marker.generated=h\n", encoding="utf-8")
+    game = tmp_path / "Grim Dawn"
+    game.mkdir()
+    (game / "Grim Dawn.exe").touch()
+    page = _page(tmp_path, game, bundled)
+    page.settings.setValue("paths/palette_file", str(palette_file))
+    page.settings.sync()
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args: QMessageBox.StandardButton.Yes,
+    )
+
+    page.generate()
+
+    installed = game / "settings" / "text_en"
+    assert "tagHealthy={^H}(C1){^G}Bundled Healthy" in (
+        installed / "tags_items.txt"
+    ).read_text(encoding="utf-8")
+
+
 def test_export_page_rejects_existing_folder_without_executable(
     tmp_path: Path,
 ) -> None:

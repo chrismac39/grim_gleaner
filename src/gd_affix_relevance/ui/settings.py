@@ -21,8 +21,7 @@ from PySide6.QtWidgets import (
 from gd_affix_relevance.grade_export import validate_grim_dawn_folder
 
 GAME_FOLDER_SETTING = "paths/grim_dawn_folder"
-GRIM_FUSION_ROOT_SETTING = "paths/grim_fusion_root"
-NPM_COMMAND_SETTING = "tools/npm_command"
+PALETTE_FILE_SETTING = "paths/palette_file"
 GAME_FOLDER_ENV = "GRIM_DAWN_INSTALL_PATH"
 WINDOWS_DEFAULT_GAME_FOLDER = (
     r"C:\Program Files (x86)\Steam\steamapps\common\Grim Dawn"
@@ -38,20 +37,6 @@ def sanitize_path(value: str) -> str:
     ):
         return trimmed[1:-1].strip()
     return trimmed
-
-
-def detect_default_grim_fusion_root() -> Path:
-    candidates = (
-        Path(__file__).resolve().parents[5],
-        Path(r"C:\repos\grim_fusion"),
-    )
-    for candidate in candidates:
-        if (candidate / "package.json").is_file() and (
-            candidate / "apps" / "cli" / "package.json"
-        ).is_file():
-            return candidate
-    return candidates[1]
-
 
 class SettingsPage(QWidget):
     """Store application paths that are not part of a build profile."""
@@ -102,46 +87,31 @@ class SettingsPage(QWidget):
         path_layout.addWidget(self.browse_button)
         form.addRow("Grim Dawn folder location", path_row)
 
-        self.grim_fusion_root_edit = QLineEdit(
-            self._saved_grim_fusion_root(),
-            self,
+        self.palette_file_edit = QLineEdit(self._saved_palette_file(), self)
+        self.palette_file_edit.setObjectName("outputPath")
+        self.palette_file_edit.setPlaceholderText(
+            "Optional: path to palette file (key=value)"
         )
-        self.grim_fusion_root_edit.setObjectName("outputPath")
-        self.grim_fusion_root_edit.setPlaceholderText(
-            r"Example: C:\repos\grim_fusion"
-        )
-        self.grim_fusion_root_edit.editingFinished.connect(
-            self._save_grim_fusion_root
-        )
-        fusion_row = QWidget(self)
-        fusion_layout = QHBoxLayout(fusion_row)
-        fusion_layout.setContentsMargins(0, 0, 0, 0)
-        fusion_layout.setSpacing(8)
-        fusion_layout.addWidget(self.grim_fusion_root_edit, 1)
-        self.browse_fusion_button = QPushButton("Browse...", fusion_row)
-        self.browse_fusion_button.setObjectName("profileAction")
-        self.browse_fusion_button.clicked.connect(self._browse_grim_fusion_root)
-        fusion_layout.addWidget(self.browse_fusion_button)
-        form.addRow("grim_fusion repo root", fusion_row)
-
-        self.npm_command_edit = QLineEdit(self._saved_npm_command(), self)
-        self.npm_command_edit.setObjectName("outputPath")
-        self.npm_command_edit.setPlaceholderText("Example: npm or C:\\Program Files\\nodejs\\npm.cmd")
-        self.npm_command_edit.editingFinished.connect(self._save_npm_command)
-        form.addRow("npm command", self.npm_command_edit)
+        self.palette_file_edit.editingFinished.connect(self._save_palette_file)
+        palette_row = QWidget(self)
+        palette_layout = QHBoxLayout(palette_row)
+        palette_layout.setContentsMargins(0, 0, 0, 0)
+        palette_layout.setSpacing(8)
+        palette_layout.addWidget(self.palette_file_edit, 1)
+        self.browse_palette_button = QPushButton("Browse...", palette_row)
+        self.browse_palette_button.setObjectName("profileAction")
+        self.browse_palette_button.clicked.connect(self._browse_palette_file)
+        palette_layout.addWidget(self.browse_palette_button)
+        form.addRow("Export palette file", palette_row)
         layout.addLayout(form)
 
         self.game_folder_status = QLabel(self)
         self.game_folder_status.setWordWrap(True)
         layout.addWidget(self.game_folder_status)
 
-        self.grim_fusion_root_status = QLabel(self)
-        self.grim_fusion_root_status.setWordWrap(True)
-        layout.addWidget(self.grim_fusion_root_status)
-
-        self.npm_command_status = QLabel(self)
-        self.npm_command_status.setWordWrap(True)
-        layout.addWidget(self.npm_command_status)
+        self.palette_file_status = QLabel(self)
+        self.palette_file_status.setWordWrap(True)
+        layout.addWidget(self.palette_file_status)
 
         note = QLabel(
             "Export Grades checks this folder's settings/text_en directory for "
@@ -155,8 +125,7 @@ class SettingsPage(QWidget):
         layout.addWidget(note)
         layout.addStretch()
         self._refresh_game_folder_status()
-        self._refresh_grim_fusion_root_status()
-        self._refresh_npm_command_status()
+        self._refresh_palette_file_status()
 
     @staticmethod
     def _sanitize_path(value: str) -> str:
@@ -192,48 +161,22 @@ class SettingsPage(QWidget):
             self.settings.remove(GAME_FOLDER_SETTING)
         self.settings.sync()
 
-    def _saved_grim_fusion_root(self) -> str:
-        stored = ""
-        if self.settings is not None:
-            stored = self._sanitize_path(
-                self.settings.value(GRIM_FUSION_ROOT_SETTING, "", type=str)
-            )
-        if stored:
-            self._persist_grim_fusion_root(stored)
-            return stored
+    def _saved_palette_file(self) -> str:
+        if self.settings is None:
+            return ""
+        stored = self._sanitize_path(
+            self.settings.value(PALETTE_FILE_SETTING, "", type=str)
+        )
+        self._persist_palette_file(stored)
+        return stored
 
-        detected = detect_default_grim_fusion_root()
-        self._persist_grim_fusion_root(str(detected))
-        return str(detected)
-
-    def _persist_grim_fusion_root(self, value: str) -> None:
+    def _persist_palette_file(self, value: str) -> None:
         if self.settings is None:
             return
         if value:
-            self.settings.setValue(GRIM_FUSION_ROOT_SETTING, value)
+            self.settings.setValue(PALETTE_FILE_SETTING, value)
         else:
-            self.settings.remove(GRIM_FUSION_ROOT_SETTING)
-        self.settings.sync()
-
-    def _saved_npm_command(self) -> str:
-        if self.settings is not None:
-            stored = self._sanitize_path(
-                self.settings.value(NPM_COMMAND_SETTING, "", type=str)
-            )
-            if stored:
-                self._persist_npm_command(stored)
-                return stored
-        command = "npm.cmd" if os.name == "nt" else "npm"
-        self._persist_npm_command(command)
-        return command
-
-    def _persist_npm_command(self, value: str) -> None:
-        if self.settings is None:
-            return
-        if value:
-            self.settings.setValue(NPM_COMMAND_SETTING, value)
-        else:
-            self.settings.remove(NPM_COMMAND_SETTING)
+            self.settings.remove(PALETTE_FILE_SETTING)
         self.settings.sync()
 
     def _save_game_folder(self) -> None:
@@ -269,29 +212,25 @@ class SettingsPage(QWidget):
     def _browse_game_folder(self) -> None:
         self.prompt_for_game_folder()
 
-    def _save_grim_fusion_root(self) -> None:
-        value = self._sanitize_path(self.grim_fusion_root_edit.text())
-        self.grim_fusion_root_edit.setText(value)
-        self._persist_grim_fusion_root(value)
-        self._refresh_grim_fusion_root_status()
+    def _save_palette_file(self) -> None:
+        value = self._sanitize_path(self.palette_file_edit.text())
+        self.palette_file_edit.setText(value)
+        self._persist_palette_file(value)
+        self._refresh_palette_file_status()
 
-    def _browse_grim_fusion_root(self) -> None:
-        starting_path = self.grim_fusion_root_edit.text().strip() or str(Path.cwd())
-        selected = QFileDialog.getExistingDirectory(
+    def _browse_palette_file(self) -> None:
+        starting = self.palette_file_edit.text().strip()
+        directory = str(Path(starting).parent) if starting else str(Path.cwd())
+        selected, _ = QFileDialog.getOpenFileName(
             self,
-            "Select grim_fusion Repository Root",
-            starting_path,
+            "Select Palette File",
+            directory,
+            "Text files (*.txt);;All files (*.*)",
         )
         if not selected:
             return
-        self.grim_fusion_root_edit.setText(selected)
-        self._save_grim_fusion_root()
-
-    def _save_npm_command(self) -> None:
-        value = self._sanitize_path(self.npm_command_edit.text())
-        self.npm_command_edit.setText(value)
-        self._persist_npm_command(value)
-        self._refresh_npm_command_status()
+        self.palette_file_edit.setText(selected)
+        self._save_palette_file()
 
     def has_valid_game_folder(self) -> bool:
         game, _ = self._game_folder_validation()
@@ -310,44 +249,27 @@ class SettingsPage(QWidget):
         self.game_folder_status.style().unpolish(self.game_folder_status)
         self.game_folder_status.style().polish(self.game_folder_status)
 
-    def _refresh_grim_fusion_root_status(self) -> None:
-        value = self.grim_fusion_root_edit.text().strip()
+    def _refresh_palette_file_status(self) -> None:
+        value = self.palette_file_edit.text().strip()
         if not value:
-            self.grim_fusion_root_status.setObjectName("gameFolderWarning")
-            self.grim_fusion_root_status.setText(
-                "grim_fusion repo root not configured. Fusion workflow actions are unavailable."
+            self.palette_file_status.setObjectName("pageHint")
+            self.palette_file_status.setText(
+                "Using built-in Python palette defaults for export markers."
             )
         else:
-            root = Path(value)
-            if (root / "package.json").is_file() and (
-                root / "apps" / "cli" / "package.json"
-            ).is_file():
-                self.grim_fusion_root_status.setObjectName("gameFolderConfirmed")
-                self.grim_fusion_root_status.setText(
-                    f"Detected grim_fusion repository: {root}"
+            palette_path = Path(value)
+            if palette_path.is_file():
+                self.palette_file_status.setObjectName("gameFolderConfirmed")
+                self.palette_file_status.setText(
+                    f"Palette override file selected: {palette_path}"
                 )
             else:
-                self.grim_fusion_root_status.setObjectName("gameFolderWarning")
-                self.grim_fusion_root_status.setText(
-                    "Not confirmed: expected package.json and apps/cli/package.json at repo root."
+                self.palette_file_status.setObjectName("gameFolderWarning")
+                self.palette_file_status.setText(
+                    "Not confirmed: palette file path does not exist."
                 )
-        self.grim_fusion_root_status.style().unpolish(self.grim_fusion_root_status)
-        self.grim_fusion_root_status.style().polish(self.grim_fusion_root_status)
-
-    def _refresh_npm_command_status(self) -> None:
-        value = self.npm_command_edit.text().strip()
-        if not value:
-            self.npm_command_status.setObjectName("gameFolderWarning")
-            self.npm_command_status.setText(
-                "npm command is blank. Fusion workflow actions are unavailable."
-            )
-        else:
-            self.npm_command_status.setObjectName("gameFolderConfirmed")
-            self.npm_command_status.setText(
-                f"Configured npm command: {value}"
-            )
-        self.npm_command_status.style().unpolish(self.npm_command_status)
-        self.npm_command_status.style().polish(self.npm_command_status)
+        self.palette_file_status.style().unpolish(self.palette_file_status)
+        self.palette_file_status.style().polish(self.palette_file_status)
 
     def _game_folder_validation(self) -> tuple[Path | None, str]:
         value = self.game_folder_edit.text().strip()

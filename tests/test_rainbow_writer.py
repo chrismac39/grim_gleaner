@@ -18,6 +18,7 @@ from gd_affix_relevance.output import (
     build_affix_markers,
     build_unique_item_markers,
     generate_rainbow_output,
+    marker_palette_from_values,
 )
 
 
@@ -229,6 +230,34 @@ def test_writer_replaces_its_marker_and_is_idempotent(tmp_path: Path) -> None:
     text = (second_output / "tags_items.txt").read_text(encoding="utf-8")
     assert "(C1)(S++1)" not in text
     assert "tagAffix={^C}(C1){^G}Affix Name" in text
+
+
+def test_writer_applies_marker_palette_overrides(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "tags_items.txt").write_text(
+        "tagAffix={^G}Affix Name\n",
+        encoding="utf-8",
+    )
+    catalog = AffixCatalog((_affix("tagAffix", "Affix Name", _variant("health")),))
+    output = tmp_path / "output"
+
+    result = generate_rainbow_output(
+        source,
+        output,
+        catalog,
+        BuildProfile("Health", {"health": 4}),
+        marker_palette=marker_palette_from_values(
+            {
+                "marker.generated": "h",
+                "marker.default": "w",
+            }
+        ),
+    )
+
+    assert result.annotated_lines == 1
+    text = (output / "tags_items.txt").read_text(encoding="utf-8")
+    assert "tagAffix={^H}(C1){^G}Affix Name" in text
 
 
 def test_writer_rejects_overlapping_source_and_output(tmp_path: Path) -> None:

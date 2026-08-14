@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from gd_affix_relevance.catalog import AffixCatalog, ItemCatalog
 from gd_affix_relevance.domain import BuildProfile
 from gd_affix_relevance.io_utils import atomic_write_bytes
+from gd_affix_relevance.palette_config import default_palette
 from gd_affix_relevance.scoring import (
     canonical_skill_reference,
     item_semantic_stat_ids,
@@ -28,6 +30,20 @@ RAINBOW_SET_MARKER_PATTERN = re.compile(
 )
 MARKER_COLOR = "{^C}"
 DEFAULT_COLOR = "{^E}"
+
+
+@dataclass(frozen=True, slots=True)
+class MarkerPalette:
+    generated_color_code: str
+    default_color_code: str
+
+    @property
+    def generated_color(self) -> str:
+        return f"{{^{self.generated_color_code.upper()}}}"
+
+    @property
+    def default_color(self) -> str:
+        return f"{{^{self.default_color_code.upper()}}}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +75,18 @@ class RainbowGenerationResult:
     missing_unique_tags: tuple[str, ...]
     changes: tuple[LocalizationChange, ...]
     fallback_source_root: Path | None = None
+
+
+def marker_palette_from_values(
+    values: Mapping[str, str] | None = None,
+) -> MarkerPalette:
+    merged = default_palette()
+    if values is not None:
+        merged.update(values)
+    return MarkerPalette(
+        generated_color_code=merged.get("marker.generated", "c"),
+        default_color_code=merged.get("marker.default", "e"),
+    )
 
 
 def build_affix_markers(
@@ -167,6 +195,7 @@ def generate_rainbow_output(
     *,
     items: ItemCatalog | None = None,
     fallback_source_root: Path | None = None,
+    marker_palette: MarkerPalette | None = None,
 ) -> RainbowGenerationResult:
     """Clone merged localization and annotate affix and unique-item tags.
 
@@ -198,6 +227,7 @@ def generate_rainbow_output(
     source_files = _merged_source_files(source, fallback)
     if not source_files:
         raise ValueError("localization sources contain no files")
+    resolved_palette = marker_palette or marker_palette_from_values()
 
     affix_instructions = _build_affix_instructions(catalog, profile)
     unique_instructions = _build_unique_instructions(
@@ -214,6 +244,7 @@ def generate_rainbow_output(
                 raw_bytes,
                 instructions,
                 relative.as_posix(),
+                resolved_palette,
             )
             changes.extend(file_changes)
             found_tags.update(file_found_tags)
@@ -263,6 +294,7 @@ def _annotate_text_bytes(
     raw_bytes: bytes,
     instructions: dict[str, _MarkerInstruction],
     relative_path: str,
+    marker_palette: MarkerPalette,
 ) -> tuple[bytes, tuple[LocalizationChange, ...], set[str]]:
     has_bom = raw_bytes.startswith(UTF8_BOM)
     text = raw_bytes.decode("utf-8-sig")
@@ -283,7 +315,11 @@ def _annotate_text_bytes(
 
         found_tags.add(tag)
         value = body[separator + 1 :]
-        annotated_value = _replace_generated_marker(value, instruction)
+        annotated_value = _replace_generated_marker(
+            value,
+            instruction,
+            marker_palette,
+        )
         annotated_body = f"{tag}={annotated_value}"
         output_lines.append(annotated_body + ending)
         if annotated_body != body:
@@ -304,47 +340,55 @@ def _annotate_text_bytes(
 
 
 def _replace_generated_marker(
-    value: str, instruction: _MarkerInstruction
+    value: str,
+    instruction: _MarkerInstruction,
+    marker_palette: MarkerPalette,
 ) -> str:
     clean_value = _normalize_rainbow_set_marker(
-        _strip_generated_marker(value)
+        _strip_generated_marker(value, marker_palette),
+        marker_palette,
     )
     has_explicit_color = COLOR_CODE_PATTERN.search(clean_value) is not None
     if instruction.placement == "suffix":
-        marker_color = MARKER_COLOR if has_explicit_color else ""
+        marker_color = marker_palette.generated_color if has_explicit_color else ""
         return f"{clean_value}{marker_color}{instruction.marker}"
-    marker_color = MARKER_COLOR if has_explicit_color else ""
+    marker_color = marker_palette.generated_color if has_explicit_color else ""
     return f"{marker_color}{instruction.marker}{clean_value}"
 
 
-def _strip_generated_marker(value: str) -> str:
+def _strip_generated_marker(value: str, marker_palette: MarkerPalette) -> str:
+    generated_color = marker_palette.generated_color
+    default_color = marker_palette.default_color
     existing = next(
         (
             match
             for match in GENERATED_MARKER_PATTERN.finditer(value)
             if match.group() != "(S)"
             or value[
-                max(0, match.start() - len(MARKER_COLOR)) : match.start()
+                max(0, match.start() - len(generated_color)) : match.start()
             ]
-            == MARKER_COLOR
+            == generated_color
         ),
         None,
     )
     if existing is None:
         return value
     start, end = existing.span()
-    if value[max(0, start - len(MARKER_COLOR)) : start] == MARKER_COLOR:
-        start -= len(MARKER_COLOR)
-    if value[end : end + len(DEFAULT_COLOR)] == DEFAULT_COLOR:
-        end += len(DEFAULT_COLOR)
+    if value[max(0, start - len(generated_color)) : start] == generated_color:
+        start -= len(generated_color)
+    if value[end : end + len(default_color)] == default_color:
+        end += len(default_color)
     return value[:start] + value[end:]
 
 
-def _normalize_rainbow_set_marker(value: str) -> str:
+def _normalize_rainbow_set_marker(
+    value: str,
+    marker_palette: MarkerPalette,
+) -> str:
     """Disambiguate Rainbow's set marker and restore its default color."""
 
     return RAINBOW_SET_MARKER_PATTERN.sub(
-        lambda match: f"{match.group('leading')}{DEFAULT_COLOR}($)",
+        lambda match: f"{match.group('leading')}{marker_palette.default_color}($)",
         value,
         count=1,
     )
