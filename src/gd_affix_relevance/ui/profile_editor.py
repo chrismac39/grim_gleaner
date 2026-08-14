@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSignalBlocker, Signal
+from PySide6.QtCore import QSettings, QSignalBlocker, QTimer, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -55,6 +55,7 @@ class ProfileEditor(QWidget):
         )
         self.profiles_root.mkdir(parents=True, exist_ok=True)
         self.is_dirty = False
+        self._profile_change_scheduled = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -172,16 +173,26 @@ class ProfileEditor(QWidget):
 
     def _weights_changed(self, _stat_id: str, _weight: int) -> None:
         self._mark_unsaved()
-        self.profile_changed.emit()
+        self._schedule_profile_changed()
 
     def _skills_changed(self) -> None:
         self._mark_unsaved()
-        self.profile_changed.emit()
+        self._schedule_profile_changed()
 
     def _conversion_source_changed(
         self, _destination: str, _source: str, _enabled: bool
     ) -> None:
         self._mark_unsaved()
+        self._schedule_profile_changed()
+
+    def _schedule_profile_changed(self) -> None:
+        if self._profile_change_scheduled:
+            return
+        self._profile_change_scheduled = True
+        QTimer.singleShot(0, self._emit_scheduled_profile_changed)
+
+    def _emit_scheduled_profile_changed(self) -> None:
+        self._profile_change_scheduled = False
         self.profile_changed.emit()
 
     def save_to_path(self, path: Path) -> Path:

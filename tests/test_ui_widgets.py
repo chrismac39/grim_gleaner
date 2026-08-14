@@ -98,6 +98,40 @@ def test_package_modify_all_adjusts_every_stat_and_only_shows_when_expanded() ->
     ]
 
 
+def test_package_modify_all_shows_mixed_feedback_and_updates_with_arrows() -> None:
+    _application()
+    profile = BuildProfile(weights={"health": 1, "movement_speed": 3})
+    definition = PackageDefinition(
+        "test",
+        "Test",
+        (stat("health", "Health"), stat("movement_speed", "Movement Speed")),
+    )
+    accordion = PackageAccordion(
+        definition,
+        profile.weight_for,
+        profile.set_weight,
+    )
+    accordion.show()
+    accordion.set_expanded(True)
+
+    assert [button.text() for button in accordion.modify_all.star_buttons] == [
+        "★",
+        "✶",
+        "✶",
+        "☆",
+    ]
+
+    accordion.modify_all.increment_button.click()
+
+    assert profile.weights == {"health": 2, "movement_speed": 4}
+    assert [button.text() for button in accordion.modify_all.star_buttons] == [
+        "★",
+        "★",
+        "✶",
+        "✶",
+    ]
+
+
 def test_conversion_row_folds_sources_and_persists_unchecked_types() -> None:
     _application()
     profile = BuildProfile(weights={"damage_conversion_to_fire": 4})

@@ -109,10 +109,11 @@ class WeightControl(QWidget):
         for index, button in enumerate(self.star_buttons, start=1):
             filled = index <= self._value
             button.setText("★" if filled else "☆")
-            button.setProperty("filled", filled)
+            if button.property("filled") != filled:
+                button.setProperty("filled", filled)
+                button.style().unpolish(button)
+                button.style().polish(button)
             button.setAccessibleName(f"Set weight to {index}: {WEIGHT_LABELS[index]}")
-            button.style().unpolish(button)
-            button.style().polish(button)
 
 
 class StatRow(QWidget):
@@ -267,7 +268,7 @@ class PackageModifyControl(QWidget):
         self.decrement_button.setText("◀")
         self.decrement_button.setToolTip("Decrease every stat in this package")
         self.decrement_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.decrement_button.setAutoRepeat(True)
+        self.decrement_button.setAutoRepeat(False)
         self.decrement_button.pressed.connect(self.decrement)
         layout.addWidget(self.decrement_button)
 
@@ -289,7 +290,7 @@ class PackageModifyControl(QWidget):
         self.increment_button.setText("▶")
         self.increment_button.setToolTip("Increase every stat in this package")
         self.increment_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.increment_button.setAutoRepeat(True)
+        self.increment_button.setAutoRepeat(False)
         self.increment_button.pressed.connect(self.increment)
         layout.addWidget(self.increment_button)
 
@@ -301,21 +302,39 @@ class PackageModifyControl(QWidget):
 
     def refresh(self, values: tuple[int, ...]) -> None:
         common = values[0] if values and len(set(values)) == 1 else None
+        total = len(values)
         minimum = min(values, default=0)
         maximum = max(values, default=0)
         self.decrement_button.setEnabled(maximum > 0)
         self.increment_button.setEnabled(minimum < MAX_STAT_WEIGHT)
-        state = f"weight {common}" if common is not None else "mixed weights"
+        state = (
+            f"weight {common}"
+            if common is not None
+            else f"mixed weights ({minimum}-{maximum})"
+        )
         self.setToolTip(
             f"Package has {state}. Arrows adjust each stat by one; stars set all stats."
         )
         for index, button in enumerate(self.star_buttons, start=1):
-            filled = common is not None and index <= common
-            button.setText("★" if filled else "☆")
-            button.setProperty("filled", filled)
+            if common is not None:
+                filled = index <= common
+                button.setText("★" if filled else "☆")
+            else:
+                at_or_above = sum(value >= index for value in values)
+                if at_or_above == 0:
+                    filled = False
+                    button.setText("☆")
+                elif at_or_above == total:
+                    filled = True
+                    button.setText("★")
+                else:
+                    filled = False
+                    button.setText("✶")
+            if button.property("filled") != filled:
+                button.setProperty("filled", filled)
+                button.style().unpolish(button)
+                button.style().polish(button)
             button.setAccessibleName(f"Set every package stat to {index}")
-            button.style().unpolish(button)
-            button.style().polish(button)
 
 
 class PackageAccordion(QFrame):
