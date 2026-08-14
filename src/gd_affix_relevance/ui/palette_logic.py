@@ -2,36 +2,230 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from pathlib import Path
+
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QBrush, QColor, QIcon, QPixmap
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
+    QFormLayout,
+    QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
+from gd_affix_relevance.palette_config import default_palette, load_palette
+from gd_affix_relevance.ui.settings import PALETTE_FILE_SETTING
+
+_DEFAULT_FILE_NAME = "grim-gleaner-palette.txt"
+_NO_OVERRIDE = "__none__"
+
+_COLOR_NAMES: dict[str, str] = {
+    "a": "Aqua",
+    "b": "Blue",
+    "c": "Cyan",
+    "d": "Dark Gray",
+    "e": "Brown",
+    "f": "Fuchsia/Pink",
+    "g": "Green",
+    "h": "Grayish Orange",
+    "i": "Indigo",
+    "j": "Disabled",
+    "k": "Khaki",
+    "l": "Olive",
+    "m": "Maroon",
+    "n": "Disabled",
+    "o": "Orange",
+    "p": "Purple",
+    "q": "Grayish Magenta",
+    "r": "Red",
+    "s": "Silver",
+    "t": "Teal",
+    "u": "Disabled",
+    "v": "Disabled",
+    "w": "White",
+    "x": "Dark Green",
+    "y": "Yellow",
+    "z": "Cobalt",
+}
+
+_COLOR_HEX: dict[str, str] = {
+    "a": "#80ffd5",
+    "b": "#4e7bd6",
+    "c": "#00ffff",
+    "d": "#4d4d4d",
+    "e": "#8f6b24",
+    "f": "#ff69b5",
+    "g": "#10eb5d",
+    "h": "#f1b56a",
+    "i": "#6c6fe5",
+    "j": "#4b4b4b",
+    "k": "#f1e78c",
+    "l": "#92cc00",
+    "m": "#800000",
+    "n": "#4b4b4b",
+    "o": "#f3a44d",
+    "p": "#bd94c6",
+    "q": "#9d6b92",
+    "r": "#ff4200",
+    "s": "#c0c0c0",
+    "t": "#00ffd2",
+    "u": "#4b4b4b",
+    "v": "#4b4b4b",
+    "w": "#ffffff",
+    "x": "#1f6b3a",
+    "y": "#fff62c",
+    "z": "#6a91e0",
+}
+
+_SECTION_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Rarity",
+        (
+            "rarity.common",
+            "rarity.magical",
+            "rarity.rare",
+            "rarity.epic",
+            "rarity.legendary",
+        ),
+    ),
+    (
+        "Damage",
+        (
+            "damage.physical",
+            "damage.pierce",
+            "damage.bleeding",
+            "damage.fire",
+            "damage.cold",
+            "damage.lightning",
+            "damage.poison",
+            "damage.vitality",
+            "damage.life",
+            "damage.aether",
+            "damage.chaos",
+            "damage.elemental",
+        ),
+    ),
+    (
+        "Non-damage",
+        (
+            "nondamage.attribute0",
+            "nondamage.mastery_increment",
+            "nondamage.all_skill_increment",
+            "nondamage.run_speed",
+            "nondamage.cast_speed",
+            "nondamage.attack_speed",
+            "nondamage.total_speed",
+            "nondamage.run_speed_modifier",
+            "nondamage.offensive_ability",
+            "nondamage.defensive_ability",
+            "nondamage.crit_damage",
+            "nondamage.damage_mult",
+            "nondamage.total_damage",
+        ),
+    ),
+    (
+        "Grade marker",
+        (
+            "marker.generated",
+            "marker.default",
+        ),
+    ),
+)
+
+_ENGINE_DEFAULT_CODES: dict[str, str] = {
+    "rarity.epic": "b",
+    "rarity.legendary": "i",
+    "nondamage.run_speed": "e",
+    "nondamage.cast_speed": "e",
+    "nondamage.attack_speed": "e",
+    "nondamage.total_speed": "e",
+    "nondamage.run_speed_modifier": "e",
+    "nondamage.offensive_ability": "e",
+    "nondamage.defensive_ability": "e",
+    "nondamage.crit_damage": "e",
+    "nondamage.damage_mult": "e",
+    "nondamage.total_damage": "e",
+}
+
+
+def _swatch_icon(hex_color: str) -> QIcon:
+    pixmap = QPixmap(10, 10)
+    pixmap.fill(QColor(hex_color))
+    return QIcon(pixmap)
+
+
+def _letter_options() -> Iterable[tuple[str, str]]:
+    for code in sorted(_COLOR_NAMES):
+        yield code, f"{code} ({_COLOR_NAMES[code]})"
+
+
+class _ClickSelectComboBox(QComboBox):
+    """Allow changes only through explicit open-and-click selection."""
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+        event.ignore()
+
 
 class PaletteLogicPage(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        settings: QSettings | None = None,
+    ) -> None:
         super().__init__(parent)
+        self.settings = settings
+        self._selectors: dict[str, QComboBox] = {}
+        self._label_width = self._compute_label_width()
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(14)
 
-        heading = QLabel("Palette Logic", self)
+        heading = QLabel("Color Palette", self)
         heading.setObjectName("pageTitle")
         layout.addWidget(heading)
 
         introduction = QLabel(
-            "This page documents the default color choices used by Grim Gleaner "
-            "when composing grade-aware item labels. The implementation is now "
-            "Python-native, while keeping compatibility with existing legacy "
-            "palette key conventions.",
+            "Choose color letters for each category below. These selectors write "
+            "a local palette file used by Export Grades.",
             self,
         )
         introduction.setObjectName("pageHint")
         introduction.setWordWrap(True)
         layout.addWidget(introduction)
+
+        self.palette_path = QLabel(self)
+        self.palette_path.setObjectName("pageHint")
+        self.palette_path.setWordWrap(True)
+        layout.addWidget(self.palette_path)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        self.save_button = QPushButton("Save Palette", self)
+        self.save_button.setObjectName("primaryAction")
+        self.save_button.clicked.connect(self._save_palette)
+        actions.addWidget(self.save_button)
+
+        self.reset_button = QPushButton("Reset to Defaults", self)
+        self.reset_button.setObjectName("profileAction")
+        self.reset_button.clicked.connect(self._reset_to_defaults)
+        actions.addWidget(self.reset_button)
+
+        self.reload_button = QPushButton("Reload File", self)
+        self.reload_button.setObjectName("profileAction")
+        self.reload_button.clicked.connect(self._reload_palette)
+        actions.addWidget(self.reload_button)
+        actions.addStretch()
+        layout.addLayout(actions)
 
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
@@ -42,91 +236,196 @@ class PaletteLogicPage(QWidget):
         content_layout.setContentsMargins(4, 8, 12, 8)
         content_layout.setSpacing(18)
 
-        _add_section(
-            content_layout,
-            "Design goals",
-            "1. Keep labels readable on Grim Dawn's dark tooltip background.\n"
-            "2. Preserve player-installed color files when present.\n"
-            "3. Keep palette keys stable so custom override files stay useful.\n"
-            "4. Keep defaults opinionated but allow narrow, one-line overrides.",
-            content,
-        )
+        for section_title, keys in _SECTION_KEYS:
+            self._add_selector_section(content_layout, section_title, keys, content)
 
-        _add_section(
-            content_layout,
-            "Rarity defaults",
-            "rarity.common = w (White)\n"
-            "rarity.magical = y (Yellow)\n"
-            "rarity.rare = g (Green)\n"
-            "rarity.epic = engine default blue unless explicitly overridden\n"
-            "rarity.legendary = engine default indigo unless explicitly overridden",
+        note = QLabel(
+            "Tip: dropdowns show color letters with names. Example: damage.chaos = "
+            "p (Purple). Use Save Palette after making changes.",
             content,
         )
-
-        _add_section(
-            content_layout,
-            "Damage defaults",
-            "damage.physical = k (Khaki)\n"
-            "damage.pierce = f (Fuchsia/Pink)\n"
-            "damage.bleeding = r (Red)\n"
-            "damage.fire = o (Orange)\n"
-            "damage.cold = c (Cyan)\n"
-            "damage.lightning = z (Cobalt)\n"
-            "damage.poison = l (Olive)\n"
-            "damage.vitality = m (Maroon)\n"
-            "damage.life = m (Maroon)\n"
-            "damage.aether = a (Aqua)\n"
-            "damage.chaos = p (Purple)\n"
-            "damage.elemental = y (Yellow)",
-            content,
-        )
-
-        _add_section(
-            content_layout,
-            "Non-damage defaults",
-            "nondamage.attribute0 = h (Grayish Orange highlight)\n"
-            "nondamage.mastery_increment = t (Teal)\n"
-            "nondamage.all_skill_increment = t (Teal)\n"
-            "Most speed, OA/DA, crit, and total-damage categories remain uncolored "
-            "by default unless overridden.",
-            content,
-        )
-
-        _add_section(
-            content_layout,
-            "Why Pierce is pink",
-            "The default separates Pierce from Bleeding at a glance. "
-            "If you prefer the classic red Pierce look, set damage.pierce=r in "
-            "your custom palette file.",
-            content,
-        )
-
-        _add_section(
-            content_layout,
-            "Custom palette format",
-            "Use one key=value line per override. Blank lines and # comments are "
-            "allowed. Example:\n"
-            "damage.chaos=f\n"
-            "Only keys you provide are changed; all others keep defaults.",
-            content,
-        )
+        note.setObjectName("pageHint")
+        note.setWordWrap(True)
+        content_layout.addWidget(note)
 
         content_layout.addStretch()
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
 
+        self._reload_palette()
 
-def _add_section(
-    layout: QVBoxLayout,
-    title: str,
-    text: str,
-    parent: QWidget,
-) -> None:
-    title_label = QLabel(title, parent)
-    title_label.setObjectName("guideSectionTitle")
-    layout.addWidget(title_label)
+    def _compute_label_width(self) -> int:
+        keys = [key for _, section_keys in _SECTION_KEYS for key in section_keys]
+        metrics = self.fontMetrics()
+        widest = max(metrics.horizontalAdvance(key) for key in keys)
+        return widest + 14
 
-    body = QLabel(text, parent)
-    body.setObjectName("guideBody")
-    body.setWordWrap(True)
-    layout.addWidget(body)
+    def _palette_path(self) -> Path:
+        raw = ""
+        if self.settings is not None:
+            raw = self.settings.value(PALETTE_FILE_SETTING, "", type=str).strip()
+        if raw:
+            return Path(raw).expanduser().resolve()
+        return (Path.cwd() / _DEFAULT_FILE_NAME).resolve()
+
+    def _set_selector_value(self, key: str, value: str | None) -> None:
+        selector = self._selectors[key]
+        target = value.lower() if value else _NO_OVERRIDE
+        index = selector.findData(target)
+        if index < 0:
+            index = selector.findData(_NO_OVERRIDE)
+        selector.setCurrentIndex(index)
+        self._apply_selector_tint(selector)
+
+    def _effective_values_from_ui(self) -> dict[str, str]:
+        values: dict[str, str] = {}
+        defaults = default_palette()
+        for key, selector in self._selectors.items():
+            choice = selector.currentData()
+            if not isinstance(choice, str):
+                continue
+            if choice == _NO_OVERRIDE:
+                continue
+            default_choice = defaults.get(key) or _ENGINE_DEFAULT_CODES.get(key)
+            if default_choice is not None and choice == default_choice:
+                continue
+            values[key] = choice
+        return values
+
+    def _reload_palette(self) -> None:
+        defaults = default_palette()
+        target = self._palette_path()
+        overrides: dict[str, str] = {}
+        if target.is_file():
+            try:
+                loaded = load_palette(target)
+                for key, value in loaded.values.items():
+                    if defaults.get(key) != value:
+                        overrides[key] = value
+            except (OSError, ValueError) as error:
+                QMessageBox.warning(
+                    self,
+                    "Palette File Error",
+                    f"Could not read {target}: {error}",
+                )
+
+        for key in self._selectors:
+            if key in overrides:
+                self._set_selector_value(key, overrides[key])
+            elif key in defaults or key in _ENGINE_DEFAULT_CODES:
+                self._set_selector_value(
+                    key,
+                    defaults.get(key) or _ENGINE_DEFAULT_CODES.get(key),
+                )
+            else:
+                self._set_selector_value(key, None)
+        self.palette_path.setText(f"Active palette file: {target}")
+
+    def _reset_to_defaults(self) -> None:
+        defaults = default_palette()
+        for key in self._selectors:
+            if key in defaults or key in _ENGINE_DEFAULT_CODES:
+                self._set_selector_value(
+                    key,
+                    defaults.get(key) or _ENGINE_DEFAULT_CODES.get(key),
+                )
+            else:
+                self._set_selector_value(key, None)
+
+    def _save_palette(self) -> None:
+        target = self._palette_path()
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        if self.settings is not None:
+            self.settings.setValue(PALETTE_FILE_SETTING, str(target))
+            self.settings.sync()
+
+        payload = self._effective_values_from_ui()
+        lines = [
+            "# Grim Gleaner palette overrides",
+            "# Auto-generated from the Color Palette page",
+            "",
+        ]
+        for key in sorted(payload):
+            lines.append(f"{key}={payload[key]}")
+        if len(lines) == 3:
+            lines.append("# No overrides; built-in defaults will be used.")
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.palette_path.setText(f"Active palette file: {target}")
+
+    def _add_selector_section(
+        self,
+        layout: QVBoxLayout,
+        title: str,
+        keys: tuple[str, ...],
+        parent: QWidget,
+    ) -> None:
+        section_title = QLabel(title, parent)
+        section_title.setObjectName("guideSectionTitle")
+        layout.addWidget(section_title)
+
+        section_frame = QFrame(parent)
+        section_frame.setObjectName("paletteSection")
+        form = QFormLayout(section_frame)
+        form.setContentsMargins(10, 8, 10, 8)
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(10)
+
+        defaults = default_palette()
+        for key in keys:
+            label = QLabel(key, section_frame)
+            label.setObjectName("fieldLabel")
+            label.setFixedWidth(self._label_width)
+
+            selector = _ClickSelectComboBox(section_frame)
+            selector.setObjectName("paletteSelector")
+            fallback = "engine/default" if key not in defaults else "built-in default"
+            selector.addItem(f"No override ({fallback})", _NO_OVERRIDE)
+            for code, display in _letter_options():
+                swatch = _COLOR_HEX.get(code)
+                if swatch:
+                    selector.addItem(_swatch_icon(swatch), display, code)
+                else:
+                    selector.addItem(display, code)
+                row_index = selector.count() - 1
+                if swatch:
+                    swatch_color = QColor(swatch)
+                    selector.setItemData(
+                        row_index,
+                        QBrush(swatch_color),
+                        Qt.ItemDataRole.ForegroundRole,
+                    )
+            selector.currentIndexChanged.connect(
+                lambda _index, combo=selector: self._apply_selector_tint(combo)
+            )
+
+            form.addRow(label, selector)
+            self._selectors[key] = selector
+
+        layout.addWidget(section_frame)
+
+    def _apply_selector_tint(self, selector: QComboBox) -> None:
+        code = selector.currentData()
+        if not isinstance(code, str) or code == _NO_OVERRIDE:
+            selector.setStyleSheet("")
+            return
+        hex_color = _COLOR_HEX.get(code)
+        if not hex_color:
+            selector.setStyleSheet("")
+            return
+
+        selector.setStyleSheet(
+            "QComboBox#paletteSelector {"
+            "background: #242932;"
+            f"color: {hex_color};"
+            "border: 1px solid #3a414d;"
+            "border-radius: 5px;"
+            "padding: 6px 10px;"
+            "min-width: 102px;"
+            "}"
+            "QComboBox#paletteSelector QAbstractItemView {"
+            "background: #20242b;"
+            "border: 1px solid #3a414d;"
+            "selection-background-color: #3a4454;"
+            "}"
+        )

@@ -139,18 +139,19 @@ def test_main_window_exposes_gear_grade_subnavigation_and_settings() -> None:
     _application()
     window = MainWindow(catalog=AffixCatalog(()))
 
-    assert window.navigation.count() == 8
-    assert window.navigation.item(0).text() == "Build Profile"
-    assert window.navigation.item(1).text() == "Gear Grades"
-    assert window.navigation.item(2).text().strip() == "Affixes"
-    assert window.navigation.item(3).text().strip() == "Uniques"
-    assert window.navigation.item(4).text().strip() == "Add-ons"
-    assert window.navigation.item(5).text() == "Export Grades"
-    assert window.navigation.item(6).text() == "Settings"
-    assert window.navigation.item(7).text() == "Guide"
+    assert window.navigation.count() == 9
+    assert window.navigation.item(0).text() == "Color Palette"
+    assert window.navigation.item(1).text() == "Build Profile"
+    assert window.navigation.item(2).text() == "Gear Grades"
+    assert window.navigation.item(3).text().strip() == "Affixes"
+    assert window.navigation.item(4).text().strip() == "Uniques"
+    assert window.navigation.item(5).text().strip() == "Add-ons"
+    assert window.navigation.item(6).text() == "Export Grades"
+    assert window.navigation.item(7).text() == "Settings"
+    assert window.navigation.item(8).text() == "Guide"
     assert (
-        window.navigation.item(2).font().pointSizeF()
-        < window.navigation.item(1).font().pointSizeF()
+        window.navigation.item(3).font().pointSizeF()
+        < window.navigation.item(2).font().pointSizeF()
     )
     assert window.profile_editor.tabs.count() == 6
     assert window.profile_editor.tabs.tabText(4) == "Pets"
@@ -167,21 +168,21 @@ def test_main_window_exposes_gear_grade_subnavigation_and_settings() -> None:
     assert window.focusPolicy() == Qt.FocusPolicy.NoFocus
 
     window.profile_editor.view_matches_button.click()
-    assert window.navigation.currentRow() == 1
+    assert window.navigation.currentRow() == 2
     assert window.pages.currentWidget() is window.top_matches_page
 
-    window.navigation.setCurrentRow(3)
+    window.navigation.setCurrentRow(4)
     assert window.pages.currentWidget() is window.top_matches_page
     assert window.top_matches_page.tabs.currentIndex() == 1
 
     window.top_matches_page.tabs.setCurrentIndex(2)
-    assert window.navigation.currentRow() == 4
+    assert window.navigation.currentRow() == 5
 
-    window.navigation.setCurrentRow(5)
-    assert window.pages.currentWidget() is window.generate_output_page
     window.navigation.setCurrentRow(6)
-    assert window.pages.currentWidget() is window.settings_page
+    assert window.pages.currentWidget() is window.generate_output_page
     window.navigation.setCurrentRow(7)
+    assert window.pages.currentWidget() is window.settings_page
+    window.navigation.setCurrentRow(8)
     assert window.pages.currentWidget() is window.guide_page
     assert window.guide_page.findChild(QLabel, "pageTitle").text() == "Guide"
 

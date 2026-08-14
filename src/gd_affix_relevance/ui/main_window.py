@@ -133,6 +133,19 @@ class MainWindow(QMainWindow):
         skills = skills or SkillCatalog(())
         items = items or ItemCatalog((), (), (), (), (), ())
 
+        self.palette_logic_page = PaletteLogicPage(
+            self.pages,
+            settings=self.settings,
+        )
+        self.palette_logic_page_index = self.pages.addWidget(
+            self.palette_logic_page
+        )
+        self.palette_logic_navigation_row = self._add_navigation_item(
+            "Color Palette",
+            "Default colors, palette keys, and customization choices",
+            self.palette_logic_page_index,
+        )
+
         self.profile_editor = ProfileEditor(
             profile,
             self.pages,
@@ -210,16 +223,6 @@ class MainWindow(QMainWindow):
             "Guide",
             "How to use Grim Gleaner and understand its limitations",
             self.guide_page_index,
-        )
-
-        self.palette_logic_page = PaletteLogicPage(self.pages)
-        self.palette_logic_page_index = self.pages.addWidget(
-            self.palette_logic_page
-        )
-        self.palette_logic_navigation_row = self._add_navigation_item(
-            "Palette Logic",
-            "Default colors, palette keys, and customization notes",
-            self.palette_logic_page_index,
         )
 
         self.profile_editor.profile_changed.connect(self.top_matches_page.refresh)

@@ -217,6 +217,23 @@ QLineEdit#outputPath, QPlainTextEdit#outputPreview {
     border-radius: 5px;
     padding: 7px;
 }
+QFrame#paletteSection {
+    background: #1b1e24;
+    border: 1px solid #303640;
+    border-radius: 7px;
+}
+QComboBox#paletteSelector {
+    background: #242932;
+    border: 1px solid #3a414d;
+    border-radius: 5px;
+    padding: 6px 10px;
+    min-width: 102px;
+}
+QComboBox#paletteSelector QAbstractItemView {
+    background: #20242b;
+    border: 1px solid #3a414d;
+    selection-background-color: #3a4454;
+}
 QPushButton#primaryAction {
     background: #8f6b24;
     border: 1px solid #c59a3c;

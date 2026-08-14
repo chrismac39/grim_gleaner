@@ -52,7 +52,7 @@ Click over to the "Export Grades" sections from the sidebar, then click "Export 
 
 You can optionally define local palette overrides with a `grim-gleaner-palette.txt` file (or set a custom palette file path in Settings) using key=value entries.
 
-See the "Guide" and "Palette Logic" sections in the UI for more information.
+See the "Guide" and "Color Palette" sections in the UI for more information.
 
 #### Weighting Tips
 
