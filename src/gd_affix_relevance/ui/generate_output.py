@@ -120,7 +120,7 @@ class GenerateOutputPage(QWidget):
 
         profile_row = QHBoxLayout()
         profile_row.setSpacing(8)
-        profile_label = QLabel("Loaded Profile", self)
+        profile_label = QLabel("Loaded", self)
         profile_label.setObjectName("fieldLabel")
         self._switch_row_labels.append(profile_label)
         profile_row.addWidget(profile_label)

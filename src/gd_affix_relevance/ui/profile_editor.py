@@ -86,8 +86,7 @@ class ProfileEditor(QWidget):
 
         name_row = QHBoxLayout()
         name_row.setSpacing(self._profile_row_spacing)
-        name_label = QLabel("Profile name", self)
-        name_label.setText("Profile")
+        name_label = QLabel("Name", self)
         name_label.setObjectName("fieldLabel")
         self._profile_row_labels.append(name_label)
         name_row.addWidget(name_label)
@@ -147,14 +146,15 @@ class ProfileEditor(QWidget):
         custom_row.addWidget(self.load_custom_button)
         layout.addLayout(custom_row)
 
-        self.status_indent = QWidget(self)
-        self.status_indent.setFixedWidth(0)
         status_row = QHBoxLayout()
         status_row.setSpacing(self._profile_row_spacing)
-        status_row.addWidget(self.status_indent)
+        loaded_label = QLabel("Loaded", self)
+        loaded_label.setObjectName("fieldLabel")
+        self._profile_row_labels.append(loaded_label)
+        status_row.addWidget(loaded_label)
 
         initial_status = (
-            f"Loaded {self.current_profile_path.name}"
+            self.current_profile_path.name
             if self.current_profile_path is not None
             else startup_notice or "Not saved"
         )
@@ -342,7 +342,7 @@ class ProfileEditor(QWidget):
 
         self.current_profile_path = Path(path)
         self.is_dirty = False
-        self.file_status.setText(f"Loaded {self.current_profile_path.name}")
+        self.file_status.setText(self.current_profile_path.name)
         self.file_status.setToolTip(str(self.current_profile_path))
         self._refresh_profile_selectors(selected_path=self.current_profile_path)
         self.profile_path_changed.emit(self.current_profile_path)
@@ -512,7 +512,6 @@ class ProfileEditor(QWidget):
         width = max(label.sizeHint().width() for label in self._profile_row_labels)
         for label in self._profile_row_labels:
             label.setFixedWidth(width)
-        self.status_indent.setFixedWidth(width + self._profile_row_spacing)
 
     def _align_action_buttons(self) -> None:
         width = max(

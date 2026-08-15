@@ -710,6 +710,7 @@ class TopMatchesPage(QWidget):
         }
         self.resistance_cap_rows: dict[str, StatRow] = {}
         self.current_profile_path: Path | None = None
+        self._control_row_labels: list[QLabel] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 24, 28, 24)
@@ -753,8 +754,9 @@ class TopMatchesPage(QWidget):
 
         profile_row = QHBoxLayout()
         profile_row.setSpacing(8)
-        profile_label = QLabel("Loaded Profile", self)
+        profile_label = QLabel("Loaded", self)
         profile_label.setObjectName("fieldLabel")
+        self._control_row_labels.append(profile_label)
         profile_row.addWidget(profile_label)
         self.loaded_profile_badge = QLabel(self)
         self.loaded_profile_badge.setObjectName("profileStatusPill")
@@ -766,6 +768,7 @@ class TopMatchesPage(QWidget):
         style_row.setSpacing(8)
         style_label = QLabel("Gear Grade style", self)
         style_label.setObjectName("fieldLabel")
+        self._control_row_labels.append(style_label)
         style_row.addWidget(style_label)
         self.grade_style_selector = QComboBox(self)
         self.grade_style_selector.setObjectName("profileSwapSelector")
@@ -827,11 +830,19 @@ class TopMatchesPage(QWidget):
         self.tabs.addTab(self._build_unique_tab(), "Uniques")
         self.tabs.addTab(self._build_addon_tab(), "Add-ons")
         layout.addWidget(self.tabs, 1)
+        self._align_control_row_labels()
         self._sync_grade_style_controls()
         self._refresh_style_examples_from_palette()
         self._update_loaded_profile_pill()
         self.refresh_version_blurb()
         self.refresh()
+
+    def _align_control_row_labels(self) -> None:
+        if not self._control_row_labels:
+            return
+        width = max(label.sizeHint().width() for label in self._control_row_labels)
+        for label in self._control_row_labels:
+            label.setFixedWidth(width)
 
     def set_profile_path(self, path: Path | None) -> None:
         self.current_profile_path = (
@@ -842,7 +853,7 @@ class TopMatchesPage(QWidget):
     def refresh_version_blurb(self) -> None:
         if self.settings is None:
             self.profile_badge.setText("Profile: not stamped")
-            self.current_badge.setText("Current: settings unavailable")
+            self.current_badge.setText("Game: settings unavailable")
             self._set_sync_badge("unknown", "? Unknown")
             self.version_blurb.setText("Game folder settings unavailable.")
             return
@@ -853,7 +864,7 @@ class TopMatchesPage(QWidget):
         ).strip()
         if not raw_game_folder:
             self.profile_badge.setText("Profile: not stamped")
-            self.current_badge.setText("Current: folder not set")
+            self.current_badge.setText("Game: folder not set")
             self._set_sync_badge("unknown", "? Unknown")
             self.version_blurb.setText(
                 "Set Grim Dawn folder in Settings, then save profile to stamp version metadata."
@@ -885,7 +896,7 @@ class TopMatchesPage(QWidget):
             f"patch {profile_snapshot.patch_versions}"
         )
         self.current_badge.setText(
-            "Current "
+            "Game "
             f"hash {self._short_hash(current.db_hash)}  "
             f"patch {current.patch_versions}"
         )
@@ -897,7 +908,7 @@ class TopMatchesPage(QWidget):
             f"patch_versions={profile_snapshot.patch_versions}"
         )
         self.current_badge.setToolTip(
-            "Current install snapshot: "
+            "Game install snapshot: "
             f"hash={current.db_hash}, "
             f"steam_build_id={current.steam_build_id}, "
             f"patch_versions={current.patch_versions}"
@@ -1408,10 +1419,13 @@ class TopMatchesPage(QWidget):
         self.loaded_profile_badge.setToolTip(str(self.current_profile_path))
 
     def _refresh_style_examples_from_palette(self) -> None:
-        marker_hex, default_hex = self._active_palette_hex()
+        marker_hex, default_hex, grade_hex = self._active_palette_hex()
         style = self.profile.grade_display_style.strip().casefold()
         self.style_example.setText(
-            f"Style EG: {self._style_example_html(style, marker_hex, default_hex)}"
+            "Style EG: "
+            f"{self._style_example_html(style, marker_hex, default_hex)}"
+            "<br/>"
+            f"{self._style_palette_legend_html(grade_hex)}"
         )
         for index in range(self.grade_style_selector.count()):
             style_id = self.grade_style_selector.itemData(index)
@@ -1442,11 +1456,21 @@ class TopMatchesPage(QWidget):
             "}"
         )
 
-    def _active_palette_hex(self) -> tuple[str, str]:
+    def _active_palette_hex(self) -> tuple[str, str, dict[str, str]]:
         marker_hex = PALETTE_CODE_HEX.get("y", "#fff62c")
         default_hex = PALETTE_CODE_HEX.get("e", "#8f6b24")
+        grade_hex = {
+            "F0": PALETTE_CODE_HEX.get("r", "#ff4200"),
+            "D1": PALETTE_CODE_HEX.get("o", "#f3a44d"),
+            "C1": PALETTE_CODE_HEX.get("y", "#fff62c"),
+            "B2": PALETTE_CODE_HEX.get("g", "#10eb5d"),
+            "A4": PALETTE_CODE_HEX.get("t", "#00ffd2"),
+            "S6": PALETTE_CODE_HEX.get("c", "#00ffff"),
+            "S+7": PALETTE_CODE_HEX.get("b", "#4e7bd6"),
+            "S++8": PALETTE_CODE_HEX.get("p", "#bd94c6"),
+        }
         if self.settings is None:
-            return marker_hex, default_hex
+            return marker_hex, default_hex, grade_hex
         raw_path = self.settings.value(PALETTE_FILE_SETTING, "", type=str).strip()
         palette_values = None
         if raw_path:
@@ -1461,7 +1485,49 @@ class TopMatchesPage(QWidget):
             palette.default_color_code.casefold(),
             default_hex,
         )
-        return marker_hex, default_hex
+        grade_hex = {
+            "F0": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("F", palette.generated_color_code).casefold(),
+                grade_hex["F0"],
+            ),
+            "D1": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("D", palette.generated_color_code).casefold(),
+                grade_hex["D1"],
+            ),
+            "C1": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("C", palette.generated_color_code).casefold(),
+                grade_hex["C1"],
+            ),
+            "B2": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("B", palette.generated_color_code).casefold(),
+                grade_hex["B2"],
+            ),
+            "A4": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("A", palette.generated_color_code).casefold(),
+                grade_hex["A4"],
+            ),
+            "S6": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("S", palette.generated_color_code).casefold(),
+                grade_hex["S6"],
+            ),
+            "S+7": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("S+", palette.generated_color_code).casefold(),
+                grade_hex["S+7"],
+            ),
+            "S++8": PALETTE_CODE_HEX.get(
+                palette.grade_color_codes.get("S++", palette.generated_color_code).casefold(),
+                grade_hex["S++8"],
+            ),
+        }
+        return marker_hex, default_hex, grade_hex
+
+    def _style_palette_legend_html(self, grade_hex: dict[str, str]) -> str:
+        order = ("F0", "D1", "C1", "B2", "A4", "S6", "S+7", "S++8")
+        parts = [
+            f"<span style='color: {grade_hex[token]}; font-weight: 700;'>{token}</span>"
+            for token in order
+        ]
+        return "Palette grade colors: " + " ".join(parts)
 
     def _selector_item_color(
         self,

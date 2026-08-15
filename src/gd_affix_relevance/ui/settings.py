@@ -40,6 +40,13 @@ def sanitize_path(value: str) -> str:
         return trimmed[1:-1].strip()
     return trimmed
 
+
+def normalize_path_text(value: str) -> str:
+    sanitized = sanitize_path(value)
+    if not sanitized:
+        return ""
+    return os.path.normpath(sanitized)
+
 class SettingsPage(QWidget):
     """Store application paths that are not part of a build profile."""
 
@@ -81,6 +88,7 @@ class SettingsPage(QWidget):
 
         form = QFormLayout()
         self.game_folder_edit = QLineEdit(self._saved_game_folder(), self)
+
         self.game_folder_edit.setObjectName("outputPath")
         self.game_folder_edit.setPlaceholderText(
             r"Example: C:\Program Files (x86)\Steam\steamapps\common\Grim Dawn"
@@ -174,7 +182,11 @@ class SettingsPage(QWidget):
 
     @staticmethod
     def _sanitize_path(value: str) -> str:
-        return sanitize_path(value)
+        return normalize_path_text(value)
+
+    @staticmethod
+    def _format_path(path: Path) -> str:
+        return os.path.normpath(str(path))
 
     def _saved_game_folder(self) -> str:
         stored = ""
@@ -198,10 +210,11 @@ class SettingsPage(QWidget):
         return ""
 
     def _persist_game_folder(self, value: str) -> None:
+        normalized = self._sanitize_path(value)
         if self.settings is None:
             return
-        if value:
-            self.settings.setValue(GAME_FOLDER_SETTING, value)
+        if normalized:
+            self.settings.setValue(GAME_FOLDER_SETTING, normalized)
         else:
             self.settings.remove(GAME_FOLDER_SETTING)
         self.settings.sync()
@@ -216,10 +229,11 @@ class SettingsPage(QWidget):
         return stored
 
     def _persist_palette_file(self, value: str) -> None:
+        normalized = self._sanitize_path(value)
         if self.settings is None:
             return
-        if value:
-            self.settings.setValue(PALETTE_FILE_SETTING, value)
+        if normalized:
+            self.settings.setValue(PALETTE_FILE_SETTING, normalized)
         else:
             self.settings.remove(PALETTE_FILE_SETTING)
         self.settings.sync()
@@ -241,17 +255,22 @@ class SettingsPage(QWidget):
         normalized = Path(root).expanduser().resolve()
         normalized.mkdir(parents=True, exist_ok=True)
         if self.settings is not None:
-            self.settings.setValue(PROFILES_ROOT_SETTING, str(normalized))
+            self.settings.setValue(
+                PROFILES_ROOT_SETTING,
+                self._format_path(normalized),
+            )
             self.settings.sync()
         self.profiles_root = normalized
 
     def _refresh_profile_folder_paths(self) -> None:
         defaults = (self.profiles_root / "examples").resolve()
         custom = (self.profiles_root / "custom").resolve()
-        self.default_profiles_path.setText(str(defaults))
-        self.default_profiles_path.setToolTip(str(defaults))
-        self.custom_profiles_path.setText(str(custom))
-        self.custom_profiles_path.setToolTip(str(custom))
+        defaults_text = self._format_path(defaults)
+        custom_text = self._format_path(custom)
+        self.default_profiles_path.setText(defaults_text)
+        self.default_profiles_path.setToolTip(defaults_text)
+        self.custom_profiles_path.setText(custom_text)
+        self.custom_profiles_path.setToolTip(custom_text)
 
     def _browse_default_profiles_folder(self) -> None:
         self._choose_profiles_root(self.profiles_root / "examples")
@@ -279,7 +298,7 @@ class SettingsPage(QWidget):
             "Move Profile Folders",
             "Changing profile folders will move (cut/paste) both default and "
             "custom profile files to the selected location.\n\n"
-            f"New root: {new_root}\n\n"
+            f"New root: {self._format_path(new_root)}\n\n"
             "Proceed?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,
@@ -398,7 +417,8 @@ class SettingsPage(QWidget):
         else:
             self.game_folder_status.setObjectName("gameFolderConfirmed")
             self.game_folder_status.setText(
-                f"Confirmed Grim Dawn installation: {game}"
+                "Confirmed Grim Dawn installation: "
+                f"{self._format_path(game)}"
             )
         self.game_folder_status.style().unpolish(self.game_folder_status)
         self.game_folder_status.style().polish(self.game_folder_status)
@@ -415,7 +435,8 @@ class SettingsPage(QWidget):
             if palette_path.is_file():
                 self.palette_file_status.setObjectName("gameFolderConfirmed")
                 self.palette_file_status.setText(
-                    f"Active palette file (same path shown on Color Palette page): {palette_path}"
+                    "Active palette file (same path shown on Color Palette page): "
+                    f"{self._format_path(palette_path)}"
                 )
             else:
                 self.palette_file_status.setObjectName("gameFolderWarning")

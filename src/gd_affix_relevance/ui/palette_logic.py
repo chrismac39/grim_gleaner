@@ -260,8 +260,8 @@ class PaletteLogicPage(QWidget):
         layout.addWidget(self.version_blurb)
 
         introduction = QLabel(
-            "Choose color letters for each category below. These selectors write "
-            "a local palette file used by Export Grades.",
+            "Choose color letters for each category below. Export Grades uses this "
+            "active palette to write the exact grade & rarity colors you see in-game.",
             self,
         )
         introduction.setObjectName("pageHint")
@@ -335,7 +335,7 @@ class PaletteLogicPage(QWidget):
         )
         if snapshot is None:
             self.profile_badge.setText("Profile: not stamped")
-            self.current_badge.setText("Current: folder not set")
+            self.current_badge.setText("Game: folder not set")
             self._set_sync_badge("unknown", "? Unknown")
             self.version_blurb.setText(
                 "Set Grim Dawn folder in Settings, then save profile to stamp hash/build/patch metadata."
@@ -361,7 +361,7 @@ class PaletteLogicPage(QWidget):
             f"patch {profile_snapshot.patch_versions}"
         )
         self.current_badge.setText(
-            "Current "
+            "Game "
             f"hash {self._short_hash(snapshot.db_hash)}  "
             f"patch {snapshot.patch_versions}"
         )
@@ -373,7 +373,7 @@ class PaletteLogicPage(QWidget):
             f"patch_versions={profile_snapshot.patch_versions}"
         )
         self.current_badge.setToolTip(
-            "Current install snapshot: "
+            "Game install snapshot: "
             f"hash={snapshot.db_hash}, "
             f"steam_build_id={snapshot.steam_build_id}, "
             f"patch_versions={snapshot.patch_versions}"
@@ -458,7 +458,10 @@ class PaletteLogicPage(QWidget):
                 )
             else:
                 self._set_selector_value(key, None)
-        self.palette_path.setText(f"Active palette file: {target}")
+        self.palette_path.setText(
+            "Active palette file (used by Export Grades for in-game colors): "
+            f"{target}"
+        )
 
     def _reset_to_defaults(self) -> None:
         defaults = default_palette()
@@ -490,7 +493,10 @@ class PaletteLogicPage(QWidget):
         if len(lines) == 3:
             lines.append("# No overrides; built-in defaults will be used.")
         target.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        self.palette_path.setText(f"Active palette file: {target}")
+        self.palette_path.setText(
+            "Active palette file (used by Export Grades for in-game colors): "
+            f"{target}"
+        )
 
     def _add_selector_section(
         self,

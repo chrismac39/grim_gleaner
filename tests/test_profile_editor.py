@@ -69,7 +69,7 @@ def test_editor_saves_and_loads_profile_into_existing_controls(
     ]
     assert not conversion_row.source_checkboxes["physical"].isChecked()
     assert conversion_row.sources_button.text().endswith("Sources 9/10")
-    assert editor.file_status.text() == "Loaded loaded.json"
+    assert editor.file_status.text() == "loaded.json"
 
     editor.accordions["core_health"].rows["health"].weight_control.set_value(3)
     assert editor.file_status.text() == "Unsaved loaded.json"
