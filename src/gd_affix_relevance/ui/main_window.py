@@ -136,6 +136,7 @@ class MainWindow(QMainWindow):
         self.palette_logic_page = PaletteLogicPage(
             self.pages,
             settings=self.settings,
+            profile=profile,
         )
         self.palette_logic_page_index = self.pages.addWidget(
             self.palette_logic_page
@@ -168,8 +169,10 @@ class MainWindow(QMainWindow):
             catalog_status=catalog_status,
             skills=skills,
             items=items,
+            settings=self.settings,
             parent=self.pages,
         )
+        self.palette_logic_page.set_profile(self.profile_editor.profile)
         self.gear_grades_page_index = self.pages.addWidget(
             self.top_matches_page
         )
@@ -210,6 +213,12 @@ class MainWindow(QMainWindow):
 
         self.settings_page = SettingsPage(self.settings, self.pages)
         self.settings_page.game_folder_changed.connect(self._game_folder_changed)
+        self.settings_page.game_folder_changed.connect(
+            lambda _value: self.palette_logic_page.refresh_version_blurb()
+        )
+        self.settings_page.game_folder_changed.connect(
+            lambda _value: self.top_matches_page.refresh_version_blurb()
+        )
         self.settings_page_index = self.pages.addWidget(self.settings_page)
         self.settings_navigation_row = self._add_navigation_item(
             "Settings",
@@ -231,6 +240,12 @@ class MainWindow(QMainWindow):
         )
         self.profile_editor.profile_path_changed.connect(
             self._remember_profile_path
+        )
+        self.profile_editor.profile_path_changed.connect(
+            lambda _path: self.palette_logic_page.refresh_version_blurb()
+        )
+        self.profile_editor.profile_path_changed.connect(
+            lambda _path: self.top_matches_page.refresh_version_blurb()
         )
         self.profile_editor.view_matches_requested.connect(
             lambda: self.navigation.setCurrentRow(

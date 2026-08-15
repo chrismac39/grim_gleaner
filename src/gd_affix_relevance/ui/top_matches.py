@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from html import escape
+from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QSettings, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -36,6 +37,11 @@ from gd_affix_relevance.catalog import (
     SkillCatalog,
 )
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.game_version import (
+    detect_game_snapshot,
+    evaluate_profile_snapshot_match,
+    snapshot_from_profile_fields,
+)
 from gd_affix_relevance.scoring import (
     ADDON_AUGMENT,
     ADDON_COMPONENT,
@@ -61,6 +67,7 @@ from gd_affix_relevance.slots import (
 )
 from gd_affix_relevance.ui.catalog import RESISTANCE_STATS
 from gd_affix_relevance.stats import registered_stat_definitions
+from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING
 from gd_affix_relevance.ui.widgets import StatRow
 
 STAT_LABELS = {
@@ -598,6 +605,7 @@ class TopMatchesPage(QWidget):
         catalog_status: str = "",
         skills: SkillCatalog | None = None,
         items: ItemCatalog | None = None,
+        settings: QSettings | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -605,6 +613,7 @@ class TopMatchesPage(QWidget):
         self.items = items or ItemCatalog((), (), (), (), (), ())
         self.profile = profile
         self.catalog_status = catalog_status
+        self.settings = settings
         skill_catalog = skills or SkillCatalog(())
         self.skill_labels = {
             skill.skill_id: skill.display_name
@@ -666,6 +675,11 @@ class TopMatchesPage(QWidget):
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
 
+        self.version_blurb = QLabel(self)
+        self.version_blurb.setObjectName("pageHint")
+        self.version_blurb.setWordWrap(True)
+        layout.addWidget(self.version_blurb)
+
         highlight_legend = QLabel(
             "Pale turquoise: +ranks to active skills    "
             "Aquamarine: active-skill modifier",
@@ -702,7 +716,53 @@ class TopMatchesPage(QWidget):
         self.tabs.addTab(self._build_unique_tab(), "Uniques")
         self.tabs.addTab(self._build_addon_tab(), "Add-ons")
         layout.addWidget(self.tabs, 1)
+        self.refresh_version_blurb()
         self.refresh()
+
+    def refresh_version_blurb(self) -> None:
+        if self.settings is None:
+            self.version_blurb.setText(
+                "Version status: game folder settings unavailable; cannot compare "
+                "current game snapshot with profile metadata."
+            )
+            return
+        raw_game_folder = self.settings.value(
+            GAME_FOLDER_SETTING,
+            "",
+            type=str,
+        ).strip()
+        if not raw_game_folder:
+            self.version_blurb.setText(
+                "Version status: set Grim Dawn folder in Settings to enable "
+                "DB hash/build/patch compatibility checks."
+            )
+            return
+
+        current = detect_game_snapshot(Path(raw_game_folder))
+        profile_snapshot = snapshot_from_profile_fields(
+            self.profile.saved_db_hash,
+            self.profile.saved_steam_build_id,
+            self.profile.saved_patch_versions,
+        )
+        state = evaluate_profile_snapshot_match(current, profile_snapshot)
+        if state == "match":
+            summary = "Loaded profile snapshot matches current game DB hash."
+        elif state == "mismatch":
+            summary = "Loaded profile snapshot does not match current game DB hash."
+        else:
+            summary = (
+                "Loaded profile snapshot is unavailable; save the profile to record "
+                "its game snapshot metadata."
+            )
+
+        self.version_blurb.setText(
+            f"Version status: {summary} "
+            f"Current: hash={current.db_hash}, steam_build_id={current.steam_build_id}, "
+            f"patch_versions={current.patch_versions}. "
+            f"Profile: hash={profile_snapshot.db_hash}, "
+            f"steam_build_id={profile_snapshot.steam_build_id}, "
+            f"patch_versions={profile_snapshot.patch_versions}."
+        )
 
     def _build_affix_tab(self) -> QWidget:
         tab = QWidget(self)

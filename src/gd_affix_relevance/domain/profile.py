@@ -39,6 +39,9 @@ class BuildProfile:
     )
     resistance_cap_enabled: bool = False
     resistance_cap_weights: dict[str, int] = field(default_factory=dict)
+    saved_db_hash: str = ""
+    saved_steam_build_id: str = ""
+    saved_patch_versions: str = ""
 
     def __post_init__(self) -> None:
         supplied_weights = dict(self.weights)
@@ -206,6 +209,9 @@ class BuildProfile:
             "resistance_cap_weights": dict(
                 sorted(self.resistance_cap_weights.items())
             ),
+            "saved_db_hash": self.saved_db_hash,
+            "saved_steam_build_id": self.saved_steam_build_id,
+            "saved_patch_versions": self.saved_patch_versions,
             "excluded_conversion_sources": {
                 destination: sorted(sources)
                 for destination, sources in sorted(
@@ -229,6 +235,9 @@ class BuildProfile:
         raw_resistance_cap_weights = payload.get(
             "resistance_cap_weights", {}
         )
+        raw_saved_db_hash = payload.get("saved_db_hash", "")
+        raw_saved_steam_build_id = payload.get("saved_steam_build_id", "")
+        raw_saved_patch_versions = payload.get("saved_patch_versions", "")
         if not isinstance(name, str):
             raise TypeError("profile name must be a string")
         if not isinstance(raw_weights, dict):
@@ -245,11 +254,20 @@ class BuildProfile:
             raise TypeError("profile resistance cap enabled state must be boolean")
         if not isinstance(raw_resistance_cap_weights, dict):
             raise TypeError("profile resistance cap weights must be an object")
+        if not isinstance(raw_saved_db_hash, str):
+            raise TypeError("profile saved DB hash must be a string")
+        if not isinstance(raw_saved_steam_build_id, str):
+            raise TypeError("profile saved steam build ID must be a string")
+        if not isinstance(raw_saved_patch_versions, str):
+            raise TypeError("profile saved patch versions must be a string")
 
         profile = cls(
             name=name,
             masteries=tuple(raw_masteries),
             resistance_cap_enabled=raw_resistance_cap_enabled,
+            saved_db_hash=raw_saved_db_hash,
+            saved_steam_build_id=raw_saved_steam_build_id,
+            saved_patch_versions=raw_saved_patch_versions,
         )
         for stat_id, weight in raw_weights.items():
             if not isinstance(stat_id, str):

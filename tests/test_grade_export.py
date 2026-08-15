@@ -181,4 +181,4 @@ def test_export_applies_palette_file_override_to_marker_color(
     text = (game / "settings" / "text_en" / "tags_items.txt").read_text(
         encoding="utf-8"
     )
-    assert "tagHealthy={^H}(C1){^G}Bundled Healthy" in text
+    assert "tagHealthy={^H}[C1]: {^G}Bundled Healthy{^H} (c1)" in text

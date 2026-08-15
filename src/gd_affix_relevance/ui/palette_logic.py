@@ -22,7 +22,14 @@ from PySide6.QtWidgets import (
 )
 
 from gd_affix_relevance.palette_config import default_palette, load_palette
+from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.game_version import (
+    detect_game_snapshot,
+    evaluate_profile_snapshot_match,
+    snapshot_from_profile_fields,
+)
 from gd_affix_relevance.ui.settings import PALETTE_FILE_SETTING
+from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING
 
 _DEFAULT_FILE_NAME = "grim-gleaner-palette.txt"
 _NO_OVERRIDE = "__none__"
@@ -193,9 +200,11 @@ class PaletteLogicPage(QWidget):
         parent: QWidget | None = None,
         *,
         settings: QSettings | None = None,
+        profile: BuildProfile | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings = settings
+        self.profile = profile
         self._selectors: dict[str, QComboBox] = {}
         self._label_width = self._compute_label_width()
 
@@ -224,6 +233,11 @@ class PaletteLogicPage(QWidget):
         tip.setObjectName("pageHint")
         tip.setWordWrap(True)
         layout.addWidget(tip)
+
+        self.version_blurb = QLabel(self)
+        self.version_blurb.setObjectName("pageHint")
+        self.version_blurb.setWordWrap(True)
+        layout.addWidget(self.version_blurb)
 
         self.palette_path = QLabel(self)
         self.palette_path.setObjectName("pageHint")
@@ -266,6 +280,56 @@ class PaletteLogicPage(QWidget):
         layout.addWidget(scroll, 1)
 
         self._reload_palette()
+        self.refresh_version_blurb()
+
+    def set_profile(self, profile: BuildProfile) -> None:
+        self.profile = profile
+        self.refresh_version_blurb()
+
+    def refresh_version_blurb(self) -> None:
+        raw_game_folder = ""
+        if self.settings is not None:
+            raw_game_folder = self.settings.value(
+                GAME_FOLDER_SETTING,
+                "",
+                type=str,
+            ).strip()
+        snapshot = detect_game_snapshot(Path(raw_game_folder)) if raw_game_folder else None
+        profile_snapshot = (
+            snapshot_from_profile_fields(
+                self.profile.saved_db_hash,
+                self.profile.saved_steam_build_id,
+                self.profile.saved_patch_versions,
+            )
+            if self.profile is not None
+            else snapshot_from_profile_fields("", "", "")
+        )
+        if snapshot is None:
+            self.version_blurb.setText(
+                "Version status: configure a Grim Dawn folder in Settings to "
+                "compare game DB hash/patch/build with the loaded profile."
+            )
+            return
+
+        match_state = evaluate_profile_snapshot_match(snapshot, profile_snapshot)
+        if match_state == "match":
+            summary = "Loaded profile snapshot matches current game DB hash."
+        elif match_state == "mismatch":
+            summary = "Loaded profile snapshot does not match the current game DB hash."
+        else:
+            summary = (
+                "Loaded profile snapshot is unavailable; save the profile after "
+                "setting your game folder to stamp version metadata."
+            )
+
+        self.version_blurb.setText(
+            f"Version status: {summary} "
+            f"Current: hash={snapshot.db_hash}, steam_build_id={snapshot.steam_build_id}, "
+            f"patch_versions={snapshot.patch_versions}. "
+            f"Profile: hash={profile_snapshot.db_hash}, "
+            f"steam_build_id={profile_snapshot.steam_build_id}, "
+            f"patch_versions={profile_snapshot.patch_versions}."
+        )
 
     def _compute_label_width(self) -> int:
         keys = [key for _, section_keys in _SECTION_KEYS for key in section_keys]

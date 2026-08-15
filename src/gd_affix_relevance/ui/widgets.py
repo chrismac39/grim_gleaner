@@ -341,6 +341,7 @@ class PackageAccordion(QFrame):
     """Package whose nonzero values pin its contents open."""
 
     weight_changed = Signal(str, int)
+    bulk_applied = Signal()
     conversion_source_changed = Signal(str, str, bool)
 
     def __init__(
@@ -359,6 +360,7 @@ class PackageAccordion(QFrame):
         self.definition = definition
         self._weight_for = weight_for
         self._set_weight = set_weight
+        self._in_bulk_update = False
         self.setObjectName("packageAccordion")
 
         layout = QVBoxLayout(self)
@@ -464,6 +466,7 @@ class PackageAccordion(QFrame):
 
     def _apply_bulk(self, values: dict[str, int]) -> None:
         changed_values: list[tuple[str, int]] = []
+        self._in_bulk_update = True
         for stat_id, weight in values.items():
             row = self.rows[stat_id]
             if row.weight_control.value == weight:
@@ -471,11 +474,14 @@ class PackageAccordion(QFrame):
             self._set_weight(stat_id, weight)
             row.weight_control.set_value(weight, emit=False)
             changed_values.append((stat_id, weight))
+        self._in_bulk_update = False
         if any(weight > 0 for weight in values.values()):
             self.set_expanded(True)
         self._refresh_header()
         for stat_id, weight in changed_values:
             self.weight_changed.emit(stat_id, weight)
+        if changed_values:
+            self.bulk_applied.emit()
 
     def _header_clicked(self, checked: bool) -> None:
         self.set_expanded(checked)

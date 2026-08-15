@@ -22,13 +22,22 @@ from gd_affix_relevance.scoring import (
 
 UTF8_BOM = b"\xef\xbb\xbf"
 COLOR_CODE_PATTERN = re.compile(r"\{\^[^}]+\}")
-GENERATED_MARKER_PATTERN = re.compile(
+LEGACY_GENERATED_MARKER_PATTERN = re.compile(
     r"\((?:S\+\+|S\+|S|A|B|C|D|F|-|—)[*!]{0,2}\d*[*!]{0,2}\)"
+)
+LEADING_GRADE_LABEL_PATTERN = re.compile(
+    r"^(?:\{\^[A-Za-z]\})?\[(?:S\+\+|S\+|S|A|B|C|D|F|-|—)\d*\]:\s*"
+)
+TRAILING_LOWER_GRADE_PATTERN = re.compile(
+    r"\s*(?:\{\^[A-Za-z]\})?\((?:s\+\+|s\+|s|a|b|c|d|f|-|—)\d*\)\s*$"
 )
 RAINBOW_SET_MARKER_PATTERN = re.compile(
     r"^(?P<leading>\s*)(?:\{\^E\})?\((?:S|\$)\)"
 )
 GRADE_TOKEN_PATTERN = re.compile(r"^\((S\+\+|S\+|S|A|B|C|D|F|-|—)")
+GRADE_LABEL_BODY_PATTERN = re.compile(
+    r"^\((S\+\+|S\+|S|A|B|C|D|F|-|—)(\d*)"
+)
 MARKER_COLOR = "{^C}"
 DEFAULT_COLOR = "{^E}"
 
@@ -57,6 +66,7 @@ class MarkerPalette:
 class _MarkerInstruction:
     marker: str
     placement: str
+    append_lowercase_grade: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +171,9 @@ def _build_affix_instructions(
         kinds = {kind for kind, _ in tagged_variants}
         placement = "suffix" if kinds == {"suffix"} else "prefix"
         instructions[localization_tag] = _MarkerInstruction(
-            f"({score.marker_body}{flags})", placement
+            f"({score.marker_body}{flags})",
+            placement,
+            append_lowercase_grade=True,
         )
     return instructions
 
@@ -382,34 +394,71 @@ def _replace_generated_marker(
         _strip_generated_marker(value, marker_palette),
         marker_palette,
     )
+    grade_token = _grade_token(instruction.marker)
+    label_body = _grade_label_body(instruction.marker)
+    overall = f"[{label_body}]:"
+    lower = label_body.casefold()
     has_explicit_color = COLOR_CODE_PATTERN.search(clean_value) is not None
     marker_color = marker_palette.color_for_grade(instruction.marker)
     if instruction.placement == "suffix":
+        if instruction.append_lowercase_grade:
+            return f"{clean_value}{marker_color} ({lower})"
         return f"{clean_value}{marker_color}{instruction.marker}"
+
+    if instruction.append_lowercase_grade:
+        if has_explicit_color:
+            return f"{marker_color}{overall} {clean_value}{marker_color} ({lower})"
+        return (
+            f"{marker_color}{overall} "
+            f"{marker_palette.default_color}{clean_value}"
+            f"{marker_color} ({lower})"
+        )
+
     if has_explicit_color:
-        return f"{marker_color}{instruction.marker}{clean_value}"
-    return (
-        f"{marker_color}{instruction.marker}"
-        f"{marker_palette.default_color}{clean_value}"
-    )
+        return f"{marker_color}{overall} {clean_value}"
+    return f"{marker_color}{overall} {marker_palette.default_color}{clean_value}"
 
 
 def _strip_generated_marker(value: str, marker_palette: MarkerPalette) -> str:
+    cleaned = value
+
+    # Remove current leading label form: {^C}[A]: {^E}...
+    leading = LEADING_GRADE_LABEL_PATTERN.match(cleaned)
+    if leading is not None:
+        cleaned = cleaned[leading.end() :]
+        if cleaned.startswith(marker_palette.default_color):
+            cleaned = cleaned[len(marker_palette.default_color) :]
+
+    # Remove current trailing lowercase form: ...{^C} (a)
+    trailing = TRAILING_LOWER_GRADE_PATTERN.search(cleaned)
+    if trailing is not None:
+        start, end = trailing.span()
+        if start >= 4 and re.fullmatch(
+            r"\{\^[A-Za-z]\}", cleaned[start - 4 : start]
+        ):
+            start -= 4
+        cleaned = cleaned[:start] + cleaned[end:]
+
+    # Remove legacy marker form to keep upgrades idempotent.
     existing = next(
-        (match for match in GENERATED_MARKER_PATTERN.finditer(value) if match.group() != "(S)"),
+        (
+            match
+            for match in LEGACY_GENERATED_MARKER_PATTERN.finditer(cleaned)
+            if match.group() != "(S)"
+        ),
         None,
     )
     if existing is None:
-        return value
+        return cleaned
     start, end = existing.span()
-    if start >= 4 and re.fullmatch(r"\{\^[A-Za-z]\}", value[start - 4 : start]):
+    if start >= 4 and re.fullmatch(r"\{\^[A-Za-z]\}", cleaned[start - 4 : start]):
         start -= 4
     if (
-        end + 4 <= len(value)
-        and value[end : end + 4] == marker_palette.default_color
+        end + 4 <= len(cleaned)
+        and cleaned[end : end + 4] == marker_palette.default_color
     ):
         end += 4
-    return value[:start] + value[end:]
+    return cleaned[:start] + cleaned[end:]
 
 
 def _grade_token(marker: str) -> str:
@@ -417,6 +466,13 @@ def _grade_token(marker: str) -> str:
     if not match:
         return "C"
     return match.group(1)
+
+
+def _grade_label_body(marker: str) -> str:
+    match = GRADE_LABEL_BODY_PATTERN.match(marker)
+    if not match:
+        return "C"
+    return f"{match.group(1)}{match.group(2)}"
 
 
 def _normalize_rainbow_set_marker(

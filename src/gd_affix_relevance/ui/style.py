@@ -32,6 +32,51 @@ QLabel#pageTitle { font-size: 19pt; font-weight: 650; color: #ffffff; }
 QLabel#placeholderTitle { font-size: 16pt; font-weight: 600; }
 QLabel#fieldLabel { color: #c9ced8; font-weight: 600; }
 QLabel#pageHint { color: #a7adb8; }
+QWidget#versionBadgeRow {
+    background: transparent;
+}
+QLabel#versionBadge {
+    background: #232934;
+    border: 1px solid #3a4656;
+    border-radius: 11px;
+    color: #d5deea;
+    font-weight: 600;
+    padding: 5px 10px;
+}
+QLabel#versionBadge[kind="profile"] {
+    background: #2b2837;
+    border-color: #534873;
+    color: #dcd6f0;
+}
+QLabel#versionBadge[kind="current"] {
+    background: #1f2f35;
+    border-color: #3f606b;
+    color: #cbeaf5;
+}
+QLabel#versionStatusBadge {
+    border-radius: 11px;
+    font-weight: 700;
+    padding: 5px 10px;
+}
+QLabel#versionStatusBadge[syncState="match"] {
+    background: #1f3b2b;
+    border: 1px solid #4f966b;
+    color: #bbf0ce;
+}
+QLabel#versionStatusBadge[syncState="mismatch"] {
+    background: #442a2d;
+    border: 1px solid #b55a64;
+    color: #ffc0c7;
+}
+QLabel#versionStatusBadge[syncState="unknown"] {
+    background: #353126;
+    border: 1px solid #847447;
+    color: #e8d9ae;
+}
+QLabel#versionBadgeDetail {
+    color: #87909e;
+    padding-left: 2px;
+}
 QLabel#gameLocationWarning {
     background: #3a2923;
     border: 1px solid #8b5a3c;

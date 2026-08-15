@@ -37,6 +37,9 @@ def test_profile_file_round_trip_is_versioned_and_deterministic(
         "name": "Bleed Werewolf",
         "resistance_cap_enabled": True,
         "resistance_cap_weights": {"fire_resistance": 0},
+        "saved_db_hash": "",
+        "saved_patch_versions": "",
+        "saved_steam_build_id": "",
         "skill_weights": {},
         "weights": {
             "bleeding_damage_percent": 4,

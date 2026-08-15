@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSignalBlocker, QTimer, Signal
+from PySide6.QtCore import QSettings, QSignalBlocker, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -21,8 +21,10 @@ from PySide6.QtWidgets import (
 
 from gd_affix_relevance.catalog import SkillCatalog
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.game_version import detect_game_snapshot
 from gd_affix_relevance.profile_store import load_profile, save_profile
 from gd_affix_relevance.ui.catalog import PROFILE_TABS, TabDefinition
+from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING
 from gd_affix_relevance.ui.widgets import PackageAccordion
 from gd_affix_relevance.ui.skills_editor import SkillsEditor
 
@@ -55,7 +57,6 @@ class ProfileEditor(QWidget):
         )
         self.profiles_root.mkdir(parents=True, exist_ok=True)
         self.is_dirty = False
-        self._profile_change_scheduled = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -158,6 +159,7 @@ class ProfileEditor(QWidget):
                 ),
             )
             accordion.weight_changed.connect(self._weights_changed)
+            accordion.bulk_applied.connect(self._weights_bulk_changed)
             accordion.conversion_source_changed.connect(
                 self._conversion_source_changed
             )
@@ -173,31 +175,29 @@ class ProfileEditor(QWidget):
 
     def _weights_changed(self, _stat_id: str, _weight: int) -> None:
         self._mark_unsaved()
-        self._schedule_profile_changed()
+        sender = self.sender()
+        if isinstance(sender, PackageAccordion) and sender._in_bulk_update:
+            return
+        self.profile_changed.emit()
+
+    def _weights_bulk_changed(self) -> None:
+        self._mark_unsaved()
+        self.profile_changed.emit()
 
     def _skills_changed(self) -> None:
         self._mark_unsaved()
-        self._schedule_profile_changed()
+        self.profile_changed.emit()
 
     def _conversion_source_changed(
         self, _destination: str, _source: str, _enabled: bool
     ) -> None:
         self._mark_unsaved()
-        self._schedule_profile_changed()
-
-    def _schedule_profile_changed(self) -> None:
-        if self._profile_change_scheduled:
-            return
-        self._profile_change_scheduled = True
-        QTimer.singleShot(0, self._emit_scheduled_profile_changed)
-
-    def _emit_scheduled_profile_changed(self) -> None:
-        self._profile_change_scheduled = False
         self.profile_changed.emit()
 
     def save_to_path(self, path: Path) -> Path:
         """Save the active profile, primarily for UI actions and tests."""
 
+        self._stamp_profile_snapshot_from_settings()
         destination = save_profile(self.profile, path)
         self.current_profile_path = destination
         self.is_dirty = False
@@ -205,6 +205,17 @@ class ProfileEditor(QWidget):
         self.file_status.setToolTip(str(destination))
         self.profile_path_changed.emit(destination)
         return destination
+
+    def _stamp_profile_snapshot_from_settings(self) -> None:
+        if self.settings is None:
+            return
+        raw = self.settings.value(GAME_FOLDER_SETTING, "", type=str).strip()
+        if not raw:
+            return
+        snapshot = detect_game_snapshot(Path(raw))
+        self.profile.saved_db_hash = snapshot.db_hash
+        self.profile.saved_steam_build_id = snapshot.steam_build_id
+        self.profile.saved_patch_versions = snapshot.patch_versions
 
     def load_from_path(self, path: Path) -> BuildProfile:
         """Load *path* into the existing profile object and refresh controls."""
