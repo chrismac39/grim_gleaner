@@ -257,6 +257,9 @@ class MainWindow(QMainWindow):
             self.top_matches_page.set_profile_path
         )
         self.profile_editor.profile_path_changed.connect(
+            self.generate_output_page.set_profile_path
+        )
+        self.profile_editor.profile_path_changed.connect(
             lambda _path: self.generate_output_page.refresh_profile_selectors()
         )
         self.profile_editor.view_matches_requested.connect(
@@ -265,6 +268,9 @@ class MainWindow(QMainWindow):
             )
         )
         self.top_matches_page.set_profile_path(
+            self.profile_editor.current_profile_path
+        )
+        self.generate_output_page.set_profile_path(
             self.profile_editor.current_profile_path
         )
         self.top_matches_page.tabs.currentChanged.connect(

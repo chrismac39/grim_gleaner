@@ -13,6 +13,7 @@ from gd_affix_relevance.catalog import (
     AffixVariantDefinition,
 )
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.grade_export import export_grades_to_game
 from gd_affix_relevance.profile_store import save_profile
 from gd_affix_relevance.ui.generate_output import GenerateOutputPage
 
@@ -228,6 +229,17 @@ def test_export_page_applies_saved_profile_grade_snapshot(
     assert "Mutated" in installed_file.read_text(encoding="utf-8")
     assert page.apply_snapshot_button.isEnabled()
 
+    saved_index = next(
+        (
+            index
+            for index in range(page.snapshot_selector.count())
+            if page.snapshot_selector.itemText(index).startswith("custom ")
+        ),
+        -1,
+    )
+    assert saved_index >= 0
+    page.snapshot_selector.setCurrentIndex(saved_index)
+
     page.apply_selected_snapshot()
 
     text = installed_file.read_text(encoding="utf-8")
@@ -278,10 +290,8 @@ def test_export_page_lists_default_and_custom_profiles(
 
     page = _page(tmp_path, game, bundled, profiles_root=profiles_root)
 
-    assert page.default_profile_selector.isEnabled()
-    assert page.default_profile_selector.count() == 1
-    assert not page.custom_profile_selector.isEnabled()
-    assert page.custom_profile_selector.currentText() == "No custom profiles saved yet"
+    assert page.snapshot_selector.isEnabled()
+    assert page.snapshot_selector.currentText().startswith("default ")
 
     save_profile(
         BuildProfile("Custom One", {"movement_speed": 2}),
@@ -289,5 +299,22 @@ def test_export_page_lists_default_and_custom_profiles(
     )
     page.refresh_profile_selectors()
 
-    assert page.custom_profile_selector.isEnabled()
-    assert page.custom_profile_selector.count() == 1
+    assert not any(
+        page.snapshot_selector.itemText(index).startswith("custom ")
+        for index in range(page.snapshot_selector.count())
+    )
+
+    export_grades_to_game(
+        game,
+        bundled,
+        tmp_path / "staging" / "text_en",
+        tmp_path / "backups",
+        _catalog(),
+        BuildProfile("Custom One", {"movement_speed": 2}),
+    )
+    page.refresh_profile_selectors()
+
+    assert any(
+        page.snapshot_selector.itemText(index).startswith("custom ")
+        for index in range(page.snapshot_selector.count())
+    )

@@ -9,9 +9,11 @@ import tempfile
 from datetime import datetime, timezone
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from gd_affix_relevance.catalog import AffixCatalog, ItemCatalog
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.game_version import detect_game_snapshot
 from gd_affix_relevance.output import (
     RainbowGenerationResult,
     generate_rainbow_output,
@@ -24,7 +26,8 @@ BACKUP_SCHEMA_VERSION = 1
 BACKUP_MANIFEST = "backup-manifest.json"
 BACKUP_CONTENTS = "text_en"
 GRIM_DAWN_EXECUTABLE = "Grim Dawn.exe"
-PROFILE_SNAPSHOT_SCHEMA_VERSION = 1
+PROFILE_SNAPSHOT_SCHEMA_VERSION = 2
+SUPPORTED_PROFILE_SNAPSHOT_SCHEMA_VERSIONS = frozenset({1, 2})
 PROFILE_SNAPSHOT_ROOT = "profile-grade-snapshots"
 PROFILE_SNAPSHOT_METADATA = "snapshot.json"
 
@@ -50,6 +53,9 @@ class ProfileGradeSnapshot:
     profile_name: str
     created_at: str
     file_count: int
+    patch_versions: str = "unknown"
+    source_kind: str = "custom"
+    profile_payload: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +130,14 @@ def export_grades_to_game(
         shutil.rmtree(temporary, ignore_errors=True)
 
     backup, backup_created = _ensure_original_backup(target, backups_root)
-    store_profile_grade_snapshot(backups_root, profile, stage)
+    current_snapshot = detect_game_snapshot(Path(game_folder))
+    store_profile_grade_snapshot(
+        backups_root,
+        profile,
+        stage,
+        patch_versions=current_snapshot.patch_versions,
+        source_kind="custom",
+    )
     _install_directory(stage, target)
     return GradeExportResult(
         target_root=target,
@@ -134,10 +147,55 @@ def export_grades_to_game(
     )
 
 
+def build_profile_grade_snapshot(
+    game_folder: Path,
+    bundled_tags_root: Path,
+    staging_root: Path,
+    backups_root: Path,
+    catalog: AffixCatalog,
+    profile: BuildProfile,
+    *,
+    items: ItemCatalog | None = None,
+    palette_file: Path | None = None,
+    source_kind: str = "custom",
+) -> ProfileGradeSnapshot:
+    """Generate a profile-grade snapshot without installing to game files."""
+
+    selection = resolve_export_sources(game_folder, bundled_tags_root)
+    stage = Path(staging_root).expanduser().resolve()
+    stage.parent.mkdir(parents=True, exist_ok=True)
+    palette_values = load_palette(palette_file).values if palette_file is not None else None
+    temporary = Path(tempfile.mkdtemp(prefix=".grade-snapshot-", dir=stage.parent))
+    try:
+        generated = temporary / "text_en"
+        generate_rainbow_output(
+            selection.primary_root,
+            generated,
+            catalog,
+            profile,
+            items=items,
+            fallback_source_root=selection.fallback_root,
+            marker_palette=marker_palette_from_values(palette_values),
+        )
+        current_snapshot = detect_game_snapshot(Path(game_folder))
+        return store_profile_grade_snapshot(
+            backups_root,
+            profile,
+            generated,
+            patch_versions=current_snapshot.patch_versions,
+            source_kind=source_kind,
+        )
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+
+
 def store_profile_grade_snapshot(
     backups_root: Path,
     profile: BuildProfile,
     source_text_root: Path,
+    *,
+    patch_versions: str = "unknown",
+    source_kind: str = "custom",
 ) -> ProfileGradeSnapshot:
     """Persist one re-applicable export snapshot keyed by profile content."""
 
@@ -167,6 +225,9 @@ def store_profile_grade_snapshot(
                     "profile_name": profile_name,
                     "created_at": created_at,
                     "file_count": file_count,
+                    "patch_versions": patch_versions,
+                    "source_kind": source_kind,
+                    "profile_payload": profile.to_dict(),
                 },
                 indent=2,
             )
@@ -182,6 +243,9 @@ def store_profile_grade_snapshot(
         profile_name=profile_name,
         created_at=created_at,
         file_count=file_count,
+        patch_versions=patch_versions,
+        source_kind=source_kind,
+        profile_payload=profile.to_dict(),
     )
 
 
@@ -204,12 +268,17 @@ def list_profile_grade_snapshots(
             payload = json.loads(metadata.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if payload.get("schema_version") != PROFILE_SNAPSHOT_SCHEMA_VERSION:
+        if payload.get("schema_version") not in SUPPORTED_PROFILE_SNAPSHOT_SCHEMA_VERSIONS:
             continue
         snapshot_id = str(payload.get("snapshot_id", "")).strip()
         profile_name = str(payload.get("profile_name", "")).strip()
         created_at = str(payload.get("created_at", "")).strip()
         file_count = payload.get("file_count", 0)
+        patch_versions = str(payload.get("patch_versions", "unknown")).strip() or "unknown"
+        source_kind = str(payload.get("source_kind", "custom")).strip() or "custom"
+        profile_payload = payload.get("profile_payload")
+        if not isinstance(profile_payload, dict):
+            profile_payload = None
         if not snapshot_id or not profile_name:
             continue
         if isinstance(file_count, bool) or not isinstance(file_count, int):
@@ -220,6 +289,9 @@ def list_profile_grade_snapshots(
                 profile_name=profile_name,
                 created_at=created_at,
                 file_count=file_count,
+                patch_versions=patch_versions,
+                source_kind=source_kind,
+                profile_payload=profile_payload,
             )
         )
 
@@ -405,13 +477,18 @@ def _load_profile_snapshot(snapshot_dir: Path) -> tuple[ProfileGradeSnapshot, Pa
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError(f"could not read profile snapshot metadata: {error}") from error
-    if payload.get("schema_version") != PROFILE_SNAPSHOT_SCHEMA_VERSION:
+    if payload.get("schema_version") not in SUPPORTED_PROFILE_SNAPSHOT_SCHEMA_VERSIONS:
         raise ValueError("unsupported profile snapshot version")
 
     snapshot_id = str(payload.get("snapshot_id", "")).strip()
     profile_name = str(payload.get("profile_name", "")).strip()
     created_at = str(payload.get("created_at", "")).strip()
     file_count = payload.get("file_count", 0)
+    patch_versions = str(payload.get("patch_versions", "unknown")).strip() or "unknown"
+    source_kind = str(payload.get("source_kind", "custom")).strip() or "custom"
+    profile_payload = payload.get("profile_payload")
+    if not isinstance(profile_payload, dict):
+        profile_payload = None
     if not snapshot_id or not profile_name:
         raise ValueError("profile snapshot metadata is missing required fields")
     if isinstance(file_count, bool) or not isinstance(file_count, int):
@@ -423,6 +500,9 @@ def _load_profile_snapshot(snapshot_dir: Path) -> tuple[ProfileGradeSnapshot, Pa
             profile_name=profile_name,
             created_at=created_at,
             file_count=file_count,
+            patch_versions=patch_versions,
+            source_kind=source_kind,
+            profile_payload=profile_payload,
         ),
         source,
     )

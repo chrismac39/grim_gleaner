@@ -96,6 +96,16 @@ QLabel#catalogLoadWarning {
 QLabel#gameFolderWarning { color: #f0a77b; }
 QLabel#gameFolderConfirmed { color: #81d5aa; }
 QLabel#lastExportedProfile { color: #78d9e8; font-weight: 650; }
+QLabel#exportSectionTitle {
+    color: #c8cfda;
+    font-size: 10pt;
+    font-weight: 650;
+}
+QFrame#exportSectionDivider {
+    color: #343c4a;
+    background: #343c4a;
+    max-height: 1px;
+}
 QLabel#guideSectionTitle {
     color: #d4a843;
     font-size: 13pt;

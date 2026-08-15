@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QSettings, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QBrush, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -47,6 +47,8 @@ from gd_affix_relevance.game_version import (
     evaluate_profile_snapshot_match,
     snapshot_from_profile_fields,
 )
+from gd_affix_relevance.output import marker_palette_from_values
+from gd_affix_relevance.palette_config import load_palette
 from gd_affix_relevance.scoring import (
     ADDON_AUGMENT,
     ADDON_COMPONENT,
@@ -72,7 +74,7 @@ from gd_affix_relevance.slots import (
 )
 from gd_affix_relevance.ui.catalog import RESISTANCE_STATS
 from gd_affix_relevance.stats import registered_stat_definitions
-from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING
+from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING, PALETTE_FILE_SETTING
 from gd_affix_relevance.ui.widgets import StatRow
 
 STAT_LABELS = {
@@ -115,17 +117,57 @@ DETAIL_TITLE_COLORS = {
     "augment": "#25676b",
 }
 GRADE_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
-    (GRADE_DISPLAY_STYLE_FULL, "Full (EG: [A]: Item Name (a))"),
-    (GRADE_DISPLAY_STYLE_ITEM_ONLY, "Item Only (EG: [A]: Item Name)"),
+    (
+        GRADE_DISPLAY_STYLE_FULL,
+        "Full (EG: [S6]: Stonehide (s3) Stoneplate Greaves of Kings (s3))",
+    ),
+    (
+        GRADE_DISPLAY_STYLE_ITEM_ONLY,
+        "Item Only (EG: [S6]: Stonehide Stoneplate Greaves of Kings)",
+    ),
     (
         GRADE_DISPLAY_STYLE_AFFIX_ONLY,
-        "Affix/Suffix Only (EG: Item Name (a))",
+        "Affix/Suffix Only (EG: Stonehide (s3) Stoneplate Greaves of Kings (s3))",
     ),
 )
+PALETTE_CODE_HEX: dict[str, str] = {
+    "a": "#80ffd5",
+    "b": "#4e7bd6",
+    "c": "#00ffff",
+    "d": "#4d4d4d",
+    "e": "#8f6b24",
+    "f": "#ff69b5",
+    "g": "#10eb5d",
+    "h": "#f1b56a",
+    "i": "#6c6fe5",
+    "j": "#4b4b4b",
+    "k": "#f1e78c",
+    "l": "#92cc00",
+    "m": "#800000",
+    "n": "#4b4b4b",
+    "o": "#f3a44d",
+    "p": "#bd94c6",
+    "q": "#9d6b92",
+    "r": "#ff4200",
+    "s": "#c0c0c0",
+    "t": "#00ffd2",
+    "u": "#4b4b4b",
+    "v": "#4b4b4b",
+    "w": "#ffffff",
+    "x": "#1f6b3a",
+    "y": "#fff62c",
+    "z": "#6a91e0",
+}
 
 
 def _format_score(value: float) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _swatch_icon(hex_color: str) -> QIcon:
+    pixmap = QPixmap(10, 10)
+    pixmap.fill(QColor(hex_color))
+    return QIcon(pixmap)
 
 
 def _item_source_label(variant: ItemVariantDefinition) -> str:
@@ -738,6 +780,12 @@ class TopMatchesPage(QWidget):
         style_row.addWidget(self.applied_style_pill)
         layout.addLayout(style_row)
 
+        self.style_example = QLabel(self)
+        self.style_example.setObjectName("matchHighlightLegend")
+        self.style_example.setTextFormat(Qt.TextFormat.RichText)
+        self.style_example.setWordWrap(True)
+        layout.addWidget(self.style_example)
+
         self.status = QLabel(self)
         self.status.setObjectName("pageHint")
         self.status.setWordWrap(True)
@@ -780,6 +828,7 @@ class TopMatchesPage(QWidget):
         self.tabs.addTab(self._build_addon_tab(), "Add-ons")
         layout.addWidget(self.tabs, 1)
         self._sync_grade_style_controls()
+        self._refresh_style_examples_from_palette()
         self._update_loaded_profile_pill()
         self.refresh_version_blurb()
         self.refresh()
@@ -1187,6 +1236,7 @@ class TopMatchesPage(QWidget):
         self.refresh()
 
     def refresh(self, _value: int | bool = False) -> None:
+        self._refresh_style_examples_from_palette()
         self._sync_grade_style_controls()
         self._sync_resistance_cap_from_profile()
         self.affix_detail_pane.clear()
@@ -1346,6 +1396,7 @@ class TopMatchesPage(QWidget):
         elif normalized == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
             label = "Affix/Suffix Only"
         self.applied_style_pill.setText(f"Applied: {label}")
+        self._refresh_style_examples_from_palette()
 
     def _update_loaded_profile_pill(self) -> None:
         if self.current_profile_path is None:
@@ -1355,6 +1406,101 @@ class TopMatchesPage(QWidget):
             return
         self.loaded_profile_badge.setText(self.current_profile_path.name)
         self.loaded_profile_badge.setToolTip(str(self.current_profile_path))
+
+    def _refresh_style_examples_from_palette(self) -> None:
+        marker_hex, default_hex = self._active_palette_hex()
+        style = self.profile.grade_display_style.strip().casefold()
+        self.style_example.setText(
+            f"Style EG: {self._style_example_html(style, marker_hex, default_hex)}"
+        )
+        for index in range(self.grade_style_selector.count()):
+            style_id = self.grade_style_selector.itemData(index)
+            if not isinstance(style_id, str):
+                continue
+            color = self._selector_item_color(style_id, marker_hex, default_hex)
+            self.grade_style_selector.setItemData(
+                index,
+                QBrush(QColor(color)),
+                Qt.ItemDataRole.ForegroundRole,
+            )
+            self.grade_style_selector.setItemIcon(index, _swatch_icon(color))
+
+        selected_color = self._selector_item_color(style, marker_hex, default_hex)
+        self.grade_style_selector.setStyleSheet(
+            "QComboBox#profileSwapSelector {"
+            "background: #242932;"
+            "border: 1px solid #3a414d;"
+            "border-radius: 5px;"
+            "padding: 4px 9px;"
+            "min-width: 260px;"
+            f"color: {selected_color};"
+            "}"
+            "QComboBox#profileSwapSelector QAbstractItemView {"
+            "background: #20242b;"
+            "border: 1px solid #3a414d;"
+            "selection-background-color: #3a4454;"
+            "}"
+        )
+
+    def _active_palette_hex(self) -> tuple[str, str]:
+        marker_hex = PALETTE_CODE_HEX.get("y", "#fff62c")
+        default_hex = PALETTE_CODE_HEX.get("e", "#8f6b24")
+        if self.settings is None:
+            return marker_hex, default_hex
+        raw_path = self.settings.value(PALETTE_FILE_SETTING, "", type=str).strip()
+        palette_values = None
+        if raw_path:
+            try:
+                palette_values = load_palette(Path(raw_path)).values
+            except (OSError, ValueError):
+                palette_values = None
+        palette = marker_palette_from_values(palette_values)
+        marker_code = palette.grade_color_codes.get("S", palette.generated_color_code)
+        marker_hex = PALETTE_CODE_HEX.get(marker_code.casefold(), marker_hex)
+        default_hex = PALETTE_CODE_HEX.get(
+            palette.default_color_code.casefold(),
+            default_hex,
+        )
+        return marker_hex, default_hex
+
+    def _selector_item_color(
+        self,
+        style: str,
+        marker_hex: str,
+        default_hex: str,
+    ) -> str:
+        normalized = style.strip().casefold()
+        if normalized == GRADE_DISPLAY_STYLE_ITEM_ONLY:
+            return default_hex
+        return marker_hex
+
+    def _style_example_html(
+        self,
+        style: str,
+        marker_hex: str,
+        default_hex: str,
+    ) -> str:
+        marker_style = f"color: {marker_hex}; font-weight: 700;"
+        default_style = f"color: {default_hex};"
+        if style == GRADE_DISPLAY_STYLE_ITEM_ONLY:
+            return (
+                f"<span style='{marker_style}'>[S6]: </span>"
+                f"<span style='{default_style}'>Stonehide Stoneplate Greaves of Kings</span>"
+            )
+        if style == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
+            return (
+                f"<span style='{default_style}'>Stonehide </span>"
+                f"<span style='{marker_style}'>(s3)</span>"
+                f"<span style='{default_style}'> Stoneplate Greaves of Kings </span>"
+                f"<span style='{marker_style}'>(s3)</span>"
+            )
+        return (
+            f"<span style='{marker_style}'>[S6]: </span>"
+            f"<span style='{default_style}'>Stonehide </span>"
+            f"<span style='{marker_style}'>(s3)</span>"
+            f"<span style='{default_style}'> Stoneplate Greaves of Kings </span>"
+            f"<span style='{marker_style}'>(s3)</span>"
+        )
 
     def _apply_slot_filters(self) -> None:
         enabled = {
