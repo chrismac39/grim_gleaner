@@ -170,7 +170,7 @@ QPushButton#profileAction {
     padding: 7px 13px;
 }
 QPushButton#profileAction:hover { background: #39404c; }
-QLabel#profileFileStatus { color: #8f96a3; padding-left: 93px; }
+QLabel#profileFileStatus { color: #8f96a3; }
 QTableWidget#topMatchesTable, QTableWidget#affixSlotTable,
 QTableWidget#uniqueSlotTable, QTableWidget#addonSlotTable {
     background: #181b20;

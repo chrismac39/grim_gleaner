@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -139,14 +140,14 @@ _SECTION_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "Grade marker",
+        "Gear Grade marker",
         (
             "marker.generated",
             "marker.default",
         ),
     ),
     (
-        "Grade colors",
+        "Gear Grade colors",
         (
             "grade.f",
             "grade.d",
@@ -173,6 +174,24 @@ _ENGINE_DEFAULT_CODES: dict[str, str] = {
     "nondamage.crit_damage": "e",
     "nondamage.damage_mult": "e",
     "nondamage.total_damage": "e",
+}
+
+_SECTION_HELP: dict[str, str] = {
+    "Gear Grade colors": (
+        "Per-grade annotation colors used for [GRADE]: and trailing (grade) tags. "
+        "Any grade without an explicit override falls back to marker.generated."
+    ),
+}
+
+_FIELD_HELP: dict[str, str] = {
+    "marker.generated": (
+        "Fallback annotation color for generated Gear Grade tags. "
+        "Used whenever a specific grade color is not overridden."
+    ),
+    "marker.default": (
+        "Default/base text color inserted before item names when needed. "
+        "Also used when normalizing Rainbow set marker color."
+    ),
 }
 
 
@@ -481,9 +500,19 @@ class PaletteLogicPage(QWidget):
         keys: tuple[str, ...],
         parent: QWidget,
     ) -> None:
-        section_title = QLabel(title, parent)
+        section_title_row = QWidget(parent)
+        section_title_layout = QHBoxLayout(section_title_row)
+        section_title_layout.setContentsMargins(0, 0, 0, 0)
+        section_title_layout.setSpacing(6)
+
+        section_title = QLabel(title, section_title_row)
         section_title.setObjectName("guideSectionTitle")
-        layout.addWidget(section_title)
+        section_title_layout.addWidget(section_title)
+        section_help = _SECTION_HELP.get(title)
+        if section_help:
+            section_title_layout.addWidget(self._build_info_icon(section_help, section_title_row))
+        section_title_layout.addStretch()
+        layout.addWidget(section_title_row)
 
         section_frame = QFrame(parent)
         section_frame.setObjectName("paletteSection")
@@ -494,9 +523,19 @@ class PaletteLogicPage(QWidget):
 
         defaults = default_palette()
         for key in keys:
-            label = QLabel(key, section_frame)
+            label_host = QWidget(section_frame)
+            label_layout = QHBoxLayout(label_host)
+            label_layout.setContentsMargins(0, 0, 0, 0)
+            label_layout.setSpacing(6)
+
+            label = QLabel(key, label_host)
             label.setObjectName("fieldLabel")
             label.setFixedWidth(self._label_width)
+            label_layout.addWidget(label)
+            field_help = _FIELD_HELP.get(key)
+            if field_help:
+                label_layout.addWidget(self._build_info_icon(field_help, label_host))
+            label_layout.addStretch()
 
             selector = _ClickSelectComboBox(section_frame)
             selector.setObjectName("paletteSelector")
@@ -520,10 +559,20 @@ class PaletteLogicPage(QWidget):
                 lambda _index, combo=selector: self._apply_selector_tint(combo)
             )
 
-            form.addRow(label, selector)
+            form.addRow(label_host, selector)
             self._selectors[key] = selector
 
         layout.addWidget(section_frame)
+
+    def _build_info_icon(self, tooltip: str, parent: QWidget) -> QToolButton:
+        button = QToolButton(parent)
+        button.setObjectName("infoIcon")
+        button.setText("i")
+        button.setToolTip(tooltip)
+        button.setCursor(Qt.CursorShape.WhatsThisCursor)
+        button.setAutoRaise(True)
+        button.setFixedSize(16, 16)
+        return button
 
     def _apply_selector_tint(self, selector: QComboBox) -> None:
         code = selector.currentData()

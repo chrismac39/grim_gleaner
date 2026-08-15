@@ -182,22 +182,22 @@ def test_editor_exposes_default_and_custom_profile_selectors(
     defaults_root = profiles_root / "examples"
     profiles_root.mkdir(parents=True)
     defaults_root.mkdir(parents=True)
-    save_profile(BuildProfile("Default One", {"health": 1}), profiles_root / "Default One.json")
-    save_profile(BuildProfile("Example Two", {"movement_speed": 2}), defaults_root / "Example Two.json")
+    save_profile(BuildProfile("Default One", {"health": 1}), defaults_root / "Default One.json")
+    save_profile(BuildProfile("Legacy Custom", {"movement_speed": 2}), profiles_root / "Legacy Custom.json")
 
     editor = ProfileEditor(BuildProfile("Custom Build", {"health": 4}), profiles_root=profiles_root)
     editor.show()
 
-    assert editor.default_profile_selector.count() == 2
-    assert not editor.custom_profile_selector.isEnabled()
-    assert editor.custom_profile_selector.currentText() == "No custom profiles saved yet"
+    assert editor.default_profile_selector.count() == 1
+    assert editor.custom_profile_selector.isEnabled()
+    assert editor.custom_profile_selector.count() == 1
+    assert editor.custom_profile_selector.currentText() == "Legacy Custom.json"
 
     editor.save_button.click()
 
-    assert editor.custom_profile_selector.isEnabled()
-    assert editor.custom_profile_selector.count() == 1
+    assert editor.custom_profile_selector.count() == 2
     assert "custom/custom-build.json" == editor.custom_profile_selector.currentText()
 
     editor.default_profile_selector.setCurrentIndex(0)
     assert editor._apply_selected_default_profile()
-    assert editor.profile.name in {"Default One", "Example Two"}
+    assert editor.profile.name == "Default One"

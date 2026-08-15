@@ -44,7 +44,7 @@ class GuidePage(QWidget):
             content_layout,
             "Basic workflow",
             "1. Set your Grim Dawn installation folder under Settings.\n"
-            "2. Create or load a Build Profile and assign 0-4 star priorities.\n"
+            "2. Create a new Build Profile, or use Apply Default / Apply Custom to load one.\n"
             "3. Choose your masteries and add any build-relevant skills.\n"
             "4. Review Gear Grades for affixes, unique items, and add-ons.\n"
             "5. Use Export Grades to apply the active profile's labels in game.\n"
@@ -78,7 +78,9 @@ class GuidePage(QWidget):
         _add_section(
             content_layout,
             "Export and profiles",
-            "Save and Load default to Grim Gleaner's Profiles folder. Export "
+            "Build Profile keeps shipped defaults and your custom profiles in-app: "
+            "use Apply Default or Apply Custom to switch, and use Save Profile to "
+            "write your current setup into the custom profile list. Export "
             "uses your current settings/text_en as the working source, applies the "
             "active profile grades, and writes the updated graded output back in place. "
             "Each export also saves a reusable profile-grade snapshot for quick switching "

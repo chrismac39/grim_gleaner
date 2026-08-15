@@ -62,6 +62,7 @@ class ProfileEditor(QWidget):
         self._default_profile_paths = self._discover_default_profile_paths()
         self._default_selector_paths: list[Path] = []
         self._custom_selector_paths: list[Path] = []
+        self._profile_row_labels: list[QLabel] = []
         self.is_dirty = False
 
         layout = QVBoxLayout(self)
@@ -84,6 +85,7 @@ class ProfileEditor(QWidget):
         name_row = QHBoxLayout()
         name_label = QLabel("Profile name", self)
         name_label.setObjectName("fieldLabel")
+        self._profile_row_labels.append(name_label)
         name_row.addWidget(name_label)
         self.name_edit = QLineEdit(self.profile.name, self)
         self.name_edit.setObjectName("profileName")
@@ -105,6 +107,7 @@ class ProfileEditor(QWidget):
         selector_row.setSpacing(8)
         default_label = QLabel("Defaults", self)
         default_label.setObjectName("fieldLabel")
+        self._profile_row_labels.append(default_label)
         selector_row.addWidget(default_label)
         self.default_profile_selector = QComboBox(self)
         self.default_profile_selector.setObjectName("profilePicker")
@@ -119,6 +122,7 @@ class ProfileEditor(QWidget):
         custom_row.setSpacing(8)
         custom_label = QLabel("Custom", self)
         custom_label.setObjectName("fieldLabel")
+        self._profile_row_labels.append(custom_label)
         custom_row.addWidget(custom_label)
         self.custom_profile_selector = QComboBox(self)
         self.custom_profile_selector.setObjectName("profilePicker")
@@ -128,6 +132,7 @@ class ProfileEditor(QWidget):
         self.load_custom_button.clicked.connect(self._apply_selected_custom_profile)
         custom_row.addWidget(self.load_custom_button)
         layout.addLayout(custom_row)
+        self._align_profile_row_labels()
 
         initial_status = (
             f"Loaded: {self.current_profile_path.name}"
@@ -449,13 +454,19 @@ class ProfileEditor(QWidget):
 
     def _discover_default_profile_paths(self) -> tuple[Path, ...]:
         candidates: set[Path] = set()
-        candidates.update(path for path in self.profiles_root.glob("*.json") if path.is_file())
         examples = self.profiles_root / "examples"
         if examples.is_dir():
             candidates.update(
                 path for path in examples.glob("*.json") if path.is_file()
             )
         return tuple(sorted(candidates, key=lambda path: path.name.casefold()))
+
+    def _align_profile_row_labels(self) -> None:
+        if not self._profile_row_labels:
+            return
+        width = max(label.sizeHint().width() for label in self._profile_row_labels)
+        for label in self._profile_row_labels:
+            label.setFixedWidth(width)
 
     def _list_custom_profile_paths(self) -> tuple[Path, ...]:
         paths = tuple(
