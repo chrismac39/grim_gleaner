@@ -47,9 +47,16 @@ class SettingsPage(QWidget):
         self,
         settings: QSettings | None = None,
         parent: QWidget | None = None,
+        *,
+        profiles_root: Path | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings = settings
+        self.profiles_root = (
+            Path(profiles_root).expanduser().resolve()
+            if profiles_root is not None
+            else (Path.cwd() / "artifacts" / "profiles").resolve()
+        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 28)
@@ -103,6 +110,24 @@ class SettingsPage(QWidget):
         self.browse_palette_button.clicked.connect(self._browse_palette_file)
         palette_layout.addWidget(self.browse_palette_button)
         form.addRow("Palette file override (optional)", palette_row)
+
+        self.default_profiles_path = QLineEdit(
+            str((self.profiles_root / "examples").resolve()),
+            self,
+        )
+        self.default_profiles_path.setObjectName("outputPath")
+        self.default_profiles_path.setReadOnly(True)
+        self.default_profiles_path.setToolTip(self.default_profiles_path.text())
+        form.addRow("Default profiles folder", self.default_profiles_path)
+
+        self.custom_profiles_path = QLineEdit(
+            str((self.profiles_root / "custom").resolve()),
+            self,
+        )
+        self.custom_profiles_path.setObjectName("outputPath")
+        self.custom_profiles_path.setReadOnly(True)
+        self.custom_profiles_path.setToolTip(self.custom_profiles_path.text())
+        form.addRow("Custom profiles folder", self.custom_profiles_path)
         layout.addLayout(form)
 
         self.game_folder_status = QLabel(self)

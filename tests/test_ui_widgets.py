@@ -343,6 +343,12 @@ def test_main_window_restores_and_tracks_last_active_profile(tmp_path: Path) -> 
     window = MainWindow(catalog=AffixCatalog(()), settings=settings)
     assert window.profile_editor.profile.name == "Remembered"
     assert window.profile_editor.current_profile_path == saved
+    assert window.settings_page.default_profiles_path.text().endswith(
+        "artifacts\\profiles\\examples"
+    )
+    assert window.settings_page.custom_profiles_path.text().endswith(
+        "artifacts\\profiles\\custom"
+    )
 
     replacement = window.profile_editor.save_to_path(tmp_path / "replacement.json")
     assert settings.value("profiles/active_path") == str(replacement.resolve())

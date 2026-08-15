@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -564,15 +563,14 @@ class PaletteLogicPage(QWidget):
 
         layout.addWidget(section_frame)
 
-    def _build_info_icon(self, tooltip: str, parent: QWidget) -> QToolButton:
-        button = QToolButton(parent)
-        button.setObjectName("infoIcon")
-        button.setText("i")
-        button.setToolTip(tooltip)
-        button.setCursor(Qt.CursorShape.WhatsThisCursor)
-        button.setAutoRaise(True)
-        button.setFixedSize(16, 16)
-        return button
+    def _build_info_icon(self, tooltip: str, parent: QWidget) -> QLabel:
+        badge = QLabel("i", parent)
+        badge.setObjectName("infoIcon")
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge.setToolTip(tooltip)
+        badge.setCursor(Qt.CursorShape.ArrowCursor)
+        badge.setFixedSize(16, 16)
+        return badge
 
     def _apply_selector_tint(self, selector: QComboBox) -> None:
         code = selector.currentData()

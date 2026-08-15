@@ -101,6 +101,21 @@ QLabel#guideSectionTitle {
     font-size: 13pt;
     font-weight: 650;
 }
+QLabel#infoIcon {
+    background: #2a303a;
+    border: 1px solid #4b5568;
+    border-radius: 8px;
+    color: #c9d3e4;
+    font-size: 8.5pt;
+    font-weight: 700;
+    min-width: 16px;
+    min-height: 16px;
+}
+QLabel#infoIcon:hover {
+    background: #374154;
+    border-color: #6a7891;
+    color: #e4ecf8;
+}
 QLabel#guideBody { color: #c9ced8; }
 QLabel#matchHighlightLegend { color: #9eb5ca; padding-left: 2px; }
 QToolButton#resistanceCapButton {
@@ -163,6 +178,14 @@ QLineEdit#profileName {
     padding: 7px 9px;
 }
 QLineEdit#profileName:focus { border-color: #d4a843; }
+QLineEdit#profilePicker {
+    background: #242932;
+    border: 1px solid #3a414d;
+    border-radius: 5px;
+    padding: 4px 9px;
+    min-width: 260px;
+}
+QLineEdit#profilePicker:focus { border-color: #d4a843; }
 QPushButton#profileAction {
     background: #292e37;
     border: 1px solid #3a414d;
@@ -170,7 +193,14 @@ QPushButton#profileAction {
     padding: 7px 13px;
 }
 QPushButton#profileAction:hover { background: #39404c; }
-QLabel#profileFileStatus { color: #8f96a3; }
+QLabel#profileStatusPill {
+    background: #2b2837;
+    border: 1px solid #534873;
+    border-radius: 11px;
+    color: #dcd6f0;
+    font-weight: 600;
+    padding: 5px 10px;
+}
 QTableWidget#topMatchesTable, QTableWidget#affixSlotTable,
 QTableWidget#uniqueSlotTable, QTableWidget#addonSlotTable {
     background: #181b20;

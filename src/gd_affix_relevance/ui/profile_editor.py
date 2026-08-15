@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QStyle,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -63,6 +64,7 @@ class ProfileEditor(QWidget):
         self._default_selector_paths: list[Path] = []
         self._custom_selector_paths: list[Path] = []
         self._profile_row_labels: list[QLabel] = []
+        self._profile_row_spacing = 8
         self.is_dirty = False
 
         layout = QVBoxLayout(self)
@@ -83,28 +85,40 @@ class ProfileEditor(QWidget):
         layout.addLayout(heading_row)
 
         name_row = QHBoxLayout()
+        name_row.setSpacing(self._profile_row_spacing)
         name_label = QLabel("Profile name", self)
+        name_label.setText("Profile")
         name_label.setObjectName("fieldLabel")
         self._profile_row_labels.append(name_label)
         name_row.addWidget(name_label)
         self.name_edit = QLineEdit(self.profile.name, self)
-        self.name_edit.setObjectName("profileName")
+        self.name_edit.setObjectName("profilePicker")
         self.name_edit.textChanged.connect(self._name_changed)
         name_row.addWidget(self.name_edit, 1)
         self.new_button = QPushButton("New Profile", self)
         self.new_button.setObjectName("profileAction")
+        self.new_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_FileDialogNewFolder
+            )
+        )
         self.new_button.setToolTip("Start a blank build profile")
         self.new_button.clicked.connect(self.new_profile)
         name_row.addWidget(self.new_button)
         self.save_button = QPushButton("Save Profile", self)
         self.save_button.setObjectName("profileAction")
+        self.save_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_DialogSaveButton
+            )
+        )
         self.save_button.setToolTip("Save this profile into your custom profile list")
         self.save_button.clicked.connect(self._save_current_profile)
         name_row.addWidget(self.save_button)
         layout.addLayout(name_row)
 
         selector_row = QHBoxLayout()
-        selector_row.setSpacing(8)
+        selector_row.setSpacing(self._profile_row_spacing)
         default_label = QLabel("Defaults", self)
         default_label.setObjectName("fieldLabel")
         self._profile_row_labels.append(default_label)
@@ -119,7 +133,7 @@ class ProfileEditor(QWidget):
         layout.addLayout(selector_row)
 
         custom_row = QHBoxLayout()
-        custom_row.setSpacing(8)
+        custom_row.setSpacing(self._profile_row_spacing)
         custom_label = QLabel("Custom", self)
         custom_label.setObjectName("fieldLabel")
         self._profile_row_labels.append(custom_label)
@@ -132,18 +146,28 @@ class ProfileEditor(QWidget):
         self.load_custom_button.clicked.connect(self._apply_selected_custom_profile)
         custom_row.addWidget(self.load_custom_button)
         layout.addLayout(custom_row)
-        self._align_profile_row_labels()
+
+        self.status_indent = QWidget(self)
+        self.status_indent.setFixedWidth(0)
+        status_row = QHBoxLayout()
+        status_row.setSpacing(self._profile_row_spacing)
+        status_row.addWidget(self.status_indent)
 
         initial_status = (
-            f"Loaded: {self.current_profile_path.name}"
+            f"Loaded {self.current_profile_path.name}"
             if self.current_profile_path is not None
             else startup_notice or "Not saved"
         )
         self.file_status = QLabel(initial_status, self)
-        self.file_status.setObjectName("profileFileStatus")
+        self.file_status.setObjectName("profileStatusPill")
         if self.current_profile_path is not None:
             self.file_status.setToolTip(str(self.current_profile_path))
-        layout.addWidget(self.file_status)
+        status_row.addWidget(self.file_status)
+        status_row.addStretch()
+        layout.addLayout(status_row)
+
+        self._align_profile_row_labels()
+        self._align_action_buttons()
 
         hint_row = QHBoxLayout()
         hint = QLabel(
@@ -236,7 +260,7 @@ class ProfileEditor(QWidget):
         destination = save_profile(self.profile, path)
         self.current_profile_path = destination
         self.is_dirty = False
-        self.file_status.setText(f"Saved: {destination.name}")
+        self.file_status.setText(f"Saved {destination.name}")
         self.file_status.setToolTip(str(destination))
         self._refresh_profile_selectors(selected_path=destination)
         self.profile_path_changed.emit(destination)
@@ -297,7 +321,7 @@ class ProfileEditor(QWidget):
 
         self.current_profile_path = Path(path)
         self.is_dirty = False
-        self.file_status.setText(f"Loaded: {self.current_profile_path.name}")
+        self.file_status.setText(f"Loaded {self.current_profile_path.name}")
         self.file_status.setToolTip(str(self.current_profile_path))
         self._refresh_profile_selectors(selected_path=self.current_profile_path)
         self.profile_path_changed.emit(self.current_profile_path)
@@ -330,7 +354,7 @@ class ProfileEditor(QWidget):
         self.skills_editor.refresh_from_profile()
         self.current_profile_path = None
         self.is_dirty = False
-        self.file_status.setText("New profile — not saved")
+        self.file_status.setText("New profile not saved")
         self.file_status.setToolTip("")
         self._refresh_profile_selectors()
         self.profile_path_changed.emit(None)
@@ -467,6 +491,15 @@ class ProfileEditor(QWidget):
         width = max(label.sizeHint().width() for label in self._profile_row_labels)
         for label in self._profile_row_labels:
             label.setFixedWidth(width)
+        self.status_indent.setFixedWidth(width + self._profile_row_spacing)
+
+    def _align_action_buttons(self) -> None:
+        width = max(
+            self.load_default_button.sizeHint().width(),
+            self.load_custom_button.sizeHint().width(),
+        )
+        self.load_default_button.setFixedWidth(width)
+        self.load_custom_button.setFixedWidth(width)
 
     def _list_custom_profile_paths(self) -> tuple[Path, ...]:
         paths = tuple(
@@ -539,9 +572,7 @@ class ProfileEditor(QWidget):
             self.file_status.setText("Not saved")
             self.file_status.setToolTip("")
         else:
-            self.file_status.setText(
-                f"Unsaved changes: {self.current_profile_path.name}"
-            )
+            self.file_status.setText(f"Unsaved {self.current_profile_path.name}")
             self.file_status.setToolTip(str(self.current_profile_path))
 
     def mark_external_change(self) -> None:

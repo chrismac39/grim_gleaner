@@ -27,7 +27,7 @@ def test_editor_saves_and_loads_profile_into_existing_controls(
 
     assert saved_path.name == "original.json"
     assert editor.current_profile_path == saved_path
-    assert editor.file_status.text() == "Saved: original.json"
+    assert editor.file_status.text() == "Saved original.json"
 
     loaded_profile = BuildProfile(
         "Loaded Build",
@@ -69,10 +69,10 @@ def test_editor_saves_and_loads_profile_into_existing_controls(
     ]
     assert not conversion_row.source_checkboxes["physical"].isChecked()
     assert conversion_row.sources_button.text().endswith("Sources 9/10")
-    assert editor.file_status.text() == "Loaded: loaded.json"
+    assert editor.file_status.text() == "Loaded loaded.json"
 
     editor.accordions["core_health"].rows["health"].weight_control.set_value(3)
-    assert editor.file_status.text() == "Unsaved changes: loaded.json"
+    assert editor.file_status.text() == "Unsaved loaded.json"
 
 
 def test_new_profile_can_cancel_or_clear_every_profile_field() -> None:

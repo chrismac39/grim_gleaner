@@ -211,7 +211,11 @@ class MainWindow(QMainWindow):
             self.export_grades_page_index,
         )
 
-        self.settings_page = SettingsPage(self.settings, self.pages)
+        self.settings_page = SettingsPage(
+            self.settings,
+            self.pages,
+            profiles_root=self.runtime_paths.profiles_root,
+        )
         self.settings_page.game_folder_changed.connect(self._game_folder_changed)
         self.settings_page.game_folder_changed.connect(
             lambda _value: self.palette_logic_page.refresh_version_blurb()
