@@ -415,6 +415,27 @@ def test_weapon_filters_compose_handedness_and_weapon_style() -> None:
     assert all(warning.isHidden() for warning in page.weapon_filter_warnings)
 
 
+def test_gear_page_shows_loaded_profile_and_updates_grade_style() -> None:
+    _application()
+    window = MainWindow(
+        BuildProfile(weights={"health": 4}),
+        catalog=AffixCatalog(()),
+    )
+    page = window.top_matches_page
+
+    page.set_profile_path(None)
+    assert "Unsaved" in page.loaded_profile_badge.text()
+
+    seen = []
+    page.profile_state_changed.connect(lambda: seen.append(True))
+    item_only_index = page.grade_style_selector.findData("item_only")
+    page.grade_style_selector.setCurrentIndex(item_only_index)
+
+    assert page.profile.grade_display_style == "item_only"
+    assert page.applied_style_pill.text() == "Applied: Item Only"
+    assert seen
+
+
 def test_unique_tables_show_b_or_better_items_and_filter_types() -> None:
     app = _application()
     items = ItemCatalog(

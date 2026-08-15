@@ -69,7 +69,7 @@ class ProfileEditor(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(14)
+        layout.setSpacing(10)
 
         heading_row = QHBoxLayout()
         heading = QLabel("Build Profile", self)
@@ -92,7 +92,7 @@ class ProfileEditor(QWidget):
         self._profile_row_labels.append(name_label)
         name_row.addWidget(name_label)
         self.name_edit = QLineEdit(self.profile.name, self)
-        self.name_edit.setObjectName("profilePicker")
+        self.name_edit.setObjectName("profileInput")
         self.name_edit.textChanged.connect(self._name_changed)
         name_row.addWidget(self.name_edit, 1)
         self.new_button = QPushButton("New Profile", self)
@@ -195,6 +195,27 @@ class ProfileEditor(QWidget):
         self.tabs.addTab(self.skills_editor, "Skills")
         layout.addWidget(self.tabs, 1)
         self._refresh_profile_selectors()
+
+    def set_profiles_root(self, profiles_root: Path) -> None:
+        previous_root = self.profiles_root
+        previous_current = self.current_profile_path
+        self.profiles_root = Path(profiles_root).expanduser().resolve()
+        self.profiles_root.mkdir(parents=True, exist_ok=True)
+        self.custom_profiles_root = self.profiles_root / "custom"
+        self.custom_profiles_root.mkdir(parents=True, exist_ok=True)
+        self._default_profile_paths = self._discover_default_profile_paths()
+
+        if (
+            previous_current is not None
+            and previous_current.is_relative_to(previous_root)
+        ):
+            migrated = self.profiles_root / previous_current.relative_to(
+                previous_root
+            )
+            if migrated.exists():
+                self.current_profile_path = migrated.resolve()
+                self.file_status.setToolTip(str(self.current_profile_path))
+        self._refresh_profile_selectors(selected_path=self.current_profile_path)
 
     def _build_tab(self, definition: TabDefinition) -> QScrollArea:
         scroll = QScrollArea(self)
@@ -540,17 +561,33 @@ class ProfileEditor(QWidget):
 
         if selected_path is None:
             selected_path = self.current_profile_path
-        if selected_path is None:
-            return
-        selected = Path(selected_path).expanduser().resolve()
-        if selected in self._default_selector_paths:
-            self.default_profile_selector.setCurrentIndex(
-                self._default_selector_paths.index(selected)
-            )
-        if selected in self._custom_selector_paths:
-            self.custom_profile_selector.setCurrentIndex(
-                self._custom_selector_paths.index(selected)
-            )
+        active_default = False
+        active_custom = False
+        if selected_path is not None:
+            selected = Path(selected_path).expanduser().resolve()
+            if selected in self._default_selector_paths:
+                self.default_profile_selector.setCurrentIndex(
+                    self._default_selector_paths.index(selected)
+                )
+                active_default = True
+            if selected in self._custom_selector_paths:
+                self.custom_profile_selector.setCurrentIndex(
+                    self._custom_selector_paths.index(selected)
+                )
+                active_custom = True
+        self._set_active_selector(
+            self.default_profile_selector,
+            active_default,
+        )
+        self._set_active_selector(
+            self.custom_profile_selector,
+            active_custom,
+        )
+
+    def _set_active_selector(self, selector: QComboBox, active: bool) -> None:
+        selector.setProperty("activeLoaded", active)
+        selector.style().unpolish(selector)
+        selector.style().polish(selector)
 
     def _selector_label(self, path: Path) -> str:
         try:

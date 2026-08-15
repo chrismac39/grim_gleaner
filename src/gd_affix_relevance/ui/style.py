@@ -178,14 +178,14 @@ QLineEdit#profileName {
     padding: 7px 9px;
 }
 QLineEdit#profileName:focus { border-color: #d4a843; }
-QLineEdit#profilePicker {
+QLineEdit#profileInput {
     background: #242932;
     border: 1px solid #3a414d;
     border-radius: 5px;
     padding: 4px 9px;
     min-width: 260px;
 }
-QLineEdit#profilePicker:focus { border-color: #d4a843; }
+QLineEdit#profileInput:focus { border-color: #d4a843; }
 QPushButton#profileAction {
     background: #292e37;
     border: 1px solid #3a414d;
@@ -247,6 +247,11 @@ QComboBox#profilePicker {
     border-radius: 5px;
     padding: 4px 9px;
     min-width: 260px;
+}
+QComboBox#profilePicker[activeLoaded="true"] {
+    background: #2b2837;
+    border: 1px solid #534873;
+    color: #dcd6f0;
 }
 QComboBox#minimumGradeSelector {
     min-width: 48px;

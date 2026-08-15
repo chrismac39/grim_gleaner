@@ -198,6 +198,7 @@ class MainWindow(QMainWindow):
             source_root=self.runtime_paths.tags_root,
             output_root=self.runtime_paths.staging_output_root,
             backups_root=self.runtime_paths.backups_root,
+            profiles_root=self.runtime_paths.profiles_root,
             catalog_status=catalog_status,
             settings=self.settings,
             parent=self.pages,
@@ -217,6 +218,7 @@ class MainWindow(QMainWindow):
             profiles_root=self.runtime_paths.profiles_root,
         )
         self.settings_page.game_folder_changed.connect(self._game_folder_changed)
+        self.settings_page.profiles_root_changed.connect(self._profiles_root_changed)
         self.settings_page.game_folder_changed.connect(
             lambda _value: self.palette_logic_page.refresh_version_blurb()
         )
@@ -251,10 +253,19 @@ class MainWindow(QMainWindow):
         self.profile_editor.profile_path_changed.connect(
             lambda _path: self.top_matches_page.refresh_version_blurb()
         )
+        self.profile_editor.profile_path_changed.connect(
+            self.top_matches_page.set_profile_path
+        )
+        self.profile_editor.profile_path_changed.connect(
+            lambda _path: self.generate_output_page.refresh_profile_selectors()
+        )
         self.profile_editor.view_matches_requested.connect(
             lambda: self.navigation.setCurrentRow(
                 self.gear_grades_navigation_row
             )
+        )
+        self.top_matches_page.set_profile_path(
+            self.profile_editor.current_profile_path
         )
         self.top_matches_page.tabs.currentChanged.connect(
             self._gear_tab_changed
@@ -345,6 +356,13 @@ class MainWindow(QMainWindow):
     def _game_folder_changed(self, game_folder: str = "") -> None:
         self.generate_output_page.refresh_game_location(game_folder)
         self._update_game_location_state()
+
+    def _profiles_root_changed(self, profiles_root: str) -> None:
+        if not profiles_root.strip():
+            return
+        root = Path(profiles_root).expanduser().resolve()
+        self.profile_editor.set_profiles_root(root)
+        self.generate_output_page.set_profiles_root(root)
 
     def _update_game_location_state(self) -> None:
         self.game_location_warning.setVisible(

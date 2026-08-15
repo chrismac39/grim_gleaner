@@ -37,6 +37,11 @@ from gd_affix_relevance.catalog import (
     SkillCatalog,
 )
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.domain.profile import (
+    GRADE_DISPLAY_STYLE_AFFIX_ONLY,
+    GRADE_DISPLAY_STYLE_FULL,
+    GRADE_DISPLAY_STYLE_ITEM_ONLY,
+)
 from gd_affix_relevance.game_version import (
     detect_game_snapshot,
     evaluate_profile_snapshot_match,
@@ -109,6 +114,14 @@ DETAIL_TITLE_COLORS = {
     "component": "#786019",
     "augment": "#25676b",
 }
+GRADE_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
+    (GRADE_DISPLAY_STYLE_FULL, "Full (EG: [A]: Item Name (a))"),
+    (GRADE_DISPLAY_STYLE_ITEM_ONLY, "Item Only (EG: [A]: Item Name)"),
+    (
+        GRADE_DISPLAY_STYLE_AFFIX_ONLY,
+        "Affix/Suffix Only (EG: Item Name (a))",
+    ),
+)
 
 
 def _format_score(value: float) -> str:
@@ -654,10 +667,11 @@ class TopMatchesPage(QWidget):
             for definition in RESISTANCE_STATS
         }
         self.resistance_cap_rows: dict[str, StatRow] = {}
+        self.current_profile_path: Path | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
         heading_row = QHBoxLayout()
         heading = QLabel("Gear Grades", self)
@@ -694,6 +708,35 @@ class TopMatchesPage(QWidget):
         self.version_blurb.setObjectName("versionBadgeDetail")
         self.version_blurb.setWordWrap(True)
         layout.addWidget(self.version_blurb)
+
+        profile_row = QHBoxLayout()
+        profile_row.setSpacing(8)
+        profile_label = QLabel("Loaded Profile", self)
+        profile_label.setObjectName("fieldLabel")
+        profile_row.addWidget(profile_label)
+        self.loaded_profile_badge = QLabel(self)
+        self.loaded_profile_badge.setObjectName("profileStatusPill")
+        profile_row.addWidget(self.loaded_profile_badge)
+        profile_row.addStretch()
+        layout.addLayout(profile_row)
+
+        style_row = QHBoxLayout()
+        style_row.setSpacing(8)
+        style_label = QLabel("Gear Grade style", self)
+        style_label.setObjectName("fieldLabel")
+        style_row.addWidget(style_label)
+        self.grade_style_selector = QComboBox(self)
+        self.grade_style_selector.setObjectName("profileSwapSelector")
+        for style_id, display in GRADE_STYLE_OPTIONS:
+            self.grade_style_selector.addItem(display, style_id)
+        self.grade_style_selector.currentIndexChanged.connect(
+            self._grade_style_changed
+        )
+        style_row.addWidget(self.grade_style_selector, 1)
+        self.applied_style_pill = QLabel(self)
+        self.applied_style_pill.setObjectName("profileStatusPill")
+        style_row.addWidget(self.applied_style_pill)
+        layout.addLayout(style_row)
 
         self.status = QLabel(self)
         self.status.setObjectName("pageHint")
@@ -736,8 +779,16 @@ class TopMatchesPage(QWidget):
         self.tabs.addTab(self._build_unique_tab(), "Uniques")
         self.tabs.addTab(self._build_addon_tab(), "Add-ons")
         layout.addWidget(self.tabs, 1)
+        self._sync_grade_style_controls()
+        self._update_loaded_profile_pill()
         self.refresh_version_blurb()
         self.refresh()
+
+    def set_profile_path(self, path: Path | None) -> None:
+        self.current_profile_path = (
+            Path(path).expanduser().resolve() if path is not None else None
+        )
+        self._update_loaded_profile_pill()
 
     def refresh_version_blurb(self) -> None:
         if self.settings is None:
@@ -1136,6 +1187,7 @@ class TopMatchesPage(QWidget):
         self.refresh()
 
     def refresh(self, _value: int | bool = False) -> None:
+        self._sync_grade_style_controls()
         self._sync_resistance_cap_from_profile()
         self.affix_detail_pane.clear()
         self.unique_detail_pane.clear()
@@ -1264,6 +1316,45 @@ class TopMatchesPage(QWidget):
 
     def _minimum_grade_changed(self, _grade: str) -> None:
         self._type_filter_changed(False)
+
+    def _grade_style_changed(self, index: int) -> None:
+        if index < 0:
+            return
+        value = self.grade_style_selector.itemData(index)
+        if not isinstance(value, str):
+            return
+        normalized = value.strip().casefold()
+        if self.profile.grade_display_style == normalized:
+            self._sync_grade_style_controls()
+            return
+        self.profile.grade_display_style = normalized
+        self._sync_grade_style_controls()
+        self.profile_state_changed.emit()
+
+    def _sync_grade_style_controls(self) -> None:
+        normalized = self.profile.grade_display_style.strip().casefold()
+        for index in range(self.grade_style_selector.count()):
+            value = self.grade_style_selector.itemData(index)
+            if isinstance(value, str) and value.strip().casefold() == normalized:
+                blocker = QSignalBlocker(self.grade_style_selector)
+                self.grade_style_selector.setCurrentIndex(index)
+                del blocker
+                break
+        label = "Full"
+        if normalized == GRADE_DISPLAY_STYLE_ITEM_ONLY:
+            label = "Item Only"
+        elif normalized == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
+            label = "Affix/Suffix Only"
+        self.applied_style_pill.setText(f"Applied: {label}")
+
+    def _update_loaded_profile_pill(self) -> None:
+        if self.current_profile_path is None:
+            display = self.profile.name.strip() or "New Build Profile"
+            self.loaded_profile_badge.setText(f"Unsaved ({display})")
+            self.loaded_profile_badge.setToolTip("")
+            return
+        self.loaded_profile_badge.setText(self.current_profile_path.name)
+        self.loaded_profile_badge.setToolTip(str(self.current_profile_path))
 
     def _apply_slot_filters(self) -> None:
         enabled = {

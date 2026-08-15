@@ -10,6 +10,11 @@ from pathlib import Path
 
 from gd_affix_relevance.catalog import AffixCatalog, ItemCatalog
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.domain.profile import (
+    GRADE_DISPLAY_STYLE_AFFIX_ONLY,
+    GRADE_DISPLAY_STYLE_FULL,
+    GRADE_DISPLAY_STYLE_ITEM_ONLY,
+)
 from gd_affix_relevance.io_utils import atomic_write_bytes
 from gd_affix_relevance.palette_config import default_palette
 from gd_affix_relevance.scoring import (
@@ -139,6 +144,10 @@ def build_affix_markers(
 ) -> dict[str, str]:
     """Build one conservative marker for each exact affix localization tag."""
 
+    include_affixes, _ = _grade_style_inclusion(profile.grade_display_style)
+    if not include_affixes:
+        return {}
+
     return {
         tag: instruction.marker
         for tag, instruction in _build_affix_instructions(catalog, profile).items()
@@ -183,6 +192,10 @@ def build_unique_item_markers(
     profile: BuildProfile,
 ) -> dict[str, str]:
     """Build markers for MI, epic, and legendary equipment name tags."""
+
+    _, include_items = _grade_style_inclusion(profile.grade_display_style)
+    if not include_items:
+        return {}
 
     return {
         tag: instruction.marker
@@ -275,9 +288,18 @@ def generate_rainbow_output(
         raise ValueError("localization sources contain no files")
     resolved_palette = marker_palette or marker_palette_from_values()
 
-    affix_instructions = _build_affix_instructions(catalog, profile)
-    unique_instructions = _build_unique_instructions(
-        items or ItemCatalog((), (), (), (), (), ()), profile
+    include_affixes, include_items = _grade_style_inclusion(
+        profile.grade_display_style
+    )
+    affix_instructions = (
+        _build_affix_instructions(catalog, profile) if include_affixes else {}
+    )
+    unique_instructions = (
+        _build_unique_instructions(
+            items or ItemCatalog((), (), (), (), (), ()), profile
+        )
+        if include_items
+        else {}
     )
     instructions = {**affix_instructions, **unique_instructions}
     found_tags: set[str] = set()
@@ -334,6 +356,17 @@ def _merged_source_files(
             relative = path.relative_to(root)
             selected[relative.as_posix().casefold()] = (path, relative)
     return tuple(selected[key] for key in sorted(selected))
+
+
+def _grade_style_inclusion(style: str) -> tuple[bool, bool]:
+    normalized = style.strip().casefold()
+    if normalized == GRADE_DISPLAY_STYLE_ITEM_ONLY:
+        return False, True
+    if normalized == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
+        return True, False
+    if normalized == GRADE_DISPLAY_STYLE_FULL:
+        return True, True
+    return True, True
 
 
 def _annotate_text_bytes(

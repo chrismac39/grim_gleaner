@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Signal
@@ -22,6 +23,7 @@ from gd_affix_relevance.grade_export import validate_grim_dawn_folder
 
 GAME_FOLDER_SETTING = "paths/grim_dawn_folder"
 PALETTE_FILE_SETTING = "paths/palette_file"
+PROFILES_ROOT_SETTING = "paths/profiles_root"
 GAME_FOLDER_ENV = "GRIM_DAWN_INSTALL_PATH"
 WINDOWS_DEFAULT_GAME_FOLDER = (
     r"C:\Program Files (x86)\Steam\steamapps\common\Grim Dawn"
@@ -42,6 +44,7 @@ class SettingsPage(QWidget):
     """Store application paths that are not part of a build profile."""
 
     game_folder_changed = Signal(str)
+    profiles_root_changed = Signal(str)
 
     def __init__(
         self,
@@ -52,11 +55,12 @@ class SettingsPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self.settings = settings
-        self.profiles_root = (
+        self.default_profiles_root = (
             Path(profiles_root).expanduser().resolve()
             if profiles_root is not None
             else (Path.cwd() / "artifacts" / "profiles").resolve()
         )
+        self.profiles_root = self._saved_profiles_root()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 28)
@@ -111,23 +115,37 @@ class SettingsPage(QWidget):
         palette_layout.addWidget(self.browse_palette_button)
         form.addRow("Palette file override (optional)", palette_row)
 
-        self.default_profiles_path = QLineEdit(
-            str((self.profiles_root / "examples").resolve()),
-            self,
-        )
+        self.default_profiles_path = QLineEdit(self)
         self.default_profiles_path.setObjectName("outputPath")
         self.default_profiles_path.setReadOnly(True)
-        self.default_profiles_path.setToolTip(self.default_profiles_path.text())
-        form.addRow("Default profiles folder", self.default_profiles_path)
-
-        self.custom_profiles_path = QLineEdit(
-            str((self.profiles_root / "custom").resolve()),
-            self,
+        defaults_row = QWidget(self)
+        defaults_layout = QHBoxLayout(defaults_row)
+        defaults_layout.setContentsMargins(0, 0, 0, 0)
+        defaults_layout.setSpacing(8)
+        defaults_layout.addWidget(self.default_profiles_path, 1)
+        self.browse_default_profiles_button = QPushButton("Browse...", defaults_row)
+        self.browse_default_profiles_button.setObjectName("profileAction")
+        self.browse_default_profiles_button.clicked.connect(
+            self._browse_default_profiles_folder
         )
+        defaults_layout.addWidget(self.browse_default_profiles_button)
+        form.addRow("Default profiles folder", defaults_row)
+
+        self.custom_profiles_path = QLineEdit(self)
         self.custom_profiles_path.setObjectName("outputPath")
         self.custom_profiles_path.setReadOnly(True)
-        self.custom_profiles_path.setToolTip(self.custom_profiles_path.text())
-        form.addRow("Custom profiles folder", self.custom_profiles_path)
+        custom_row = QWidget(self)
+        custom_layout = QHBoxLayout(custom_row)
+        custom_layout.setContentsMargins(0, 0, 0, 0)
+        custom_layout.setSpacing(8)
+        custom_layout.addWidget(self.custom_profiles_path, 1)
+        self.browse_custom_profiles_button = QPushButton("Browse...", custom_row)
+        self.browse_custom_profiles_button.setObjectName("profileAction")
+        self.browse_custom_profiles_button.clicked.connect(
+            self._browse_custom_profiles_folder
+        )
+        custom_layout.addWidget(self.browse_custom_profiles_button)
+        form.addRow("Custom profiles folder", custom_row)
         layout.addLayout(form)
 
         self.game_folder_status = QLabel(self)
@@ -150,6 +168,7 @@ class SettingsPage(QWidget):
         note.setWordWrap(True)
         layout.addWidget(note)
         layout.addStretch()
+        self._refresh_profile_folder_paths()
         self._refresh_game_folder_status()
         self._refresh_palette_file_status()
 
@@ -204,6 +223,115 @@ class SettingsPage(QWidget):
         else:
             self.settings.remove(PALETTE_FILE_SETTING)
         self.settings.sync()
+
+    def _saved_profiles_root(self) -> Path:
+        raw = ""
+        if self.settings is not None:
+            raw = self._sanitize_path(
+                self.settings.value(PROFILES_ROOT_SETTING, "", type=str)
+            )
+        if raw:
+            root = Path(raw).expanduser().resolve()
+            self._persist_profiles_root(root)
+            return root
+        self._persist_profiles_root(self.default_profiles_root)
+        return self.default_profiles_root
+
+    def _persist_profiles_root(self, root: Path) -> None:
+        normalized = Path(root).expanduser().resolve()
+        normalized.mkdir(parents=True, exist_ok=True)
+        if self.settings is not None:
+            self.settings.setValue(PROFILES_ROOT_SETTING, str(normalized))
+            self.settings.sync()
+        self.profiles_root = normalized
+
+    def _refresh_profile_folder_paths(self) -> None:
+        defaults = (self.profiles_root / "examples").resolve()
+        custom = (self.profiles_root / "custom").resolve()
+        self.default_profiles_path.setText(str(defaults))
+        self.default_profiles_path.setToolTip(str(defaults))
+        self.custom_profiles_path.setText(str(custom))
+        self.custom_profiles_path.setToolTip(str(custom))
+
+    def _browse_default_profiles_folder(self) -> None:
+        self._choose_profiles_root(self.profiles_root / "examples")
+
+    def _browse_custom_profiles_folder(self) -> None:
+        self._choose_profiles_root(self.profiles_root / "custom")
+
+    def _choose_profiles_root(self, starting: Path) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Select Profile Folder Location",
+            str(starting),
+        )
+        if not selected:
+            return
+        selected_path = Path(selected).expanduser().resolve()
+        if selected_path.name.casefold() in {"examples", "custom"}:
+            new_root = selected_path.parent
+        else:
+            new_root = selected_path
+        if new_root == self.profiles_root:
+            return
+        choice = QMessageBox.question(
+            self,
+            "Move Profile Folders",
+            "Changing profile folders will move (cut/paste) both default and "
+            "custom profile files to the selected location.\n\n"
+            f"New root: {new_root}\n\n"
+            "Proceed?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if choice != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._migrate_profiles_root(new_root)
+        except OSError as error:
+            QMessageBox.critical(
+                self,
+                "Could Not Move Profile Folders",
+                str(error),
+            )
+
+    def _migrate_profiles_root(self, new_root: Path) -> None:
+        source_root = self.profiles_root
+        target_root = Path(new_root).expanduser().resolve()
+        target_root.mkdir(parents=True, exist_ok=True)
+
+        source_defaults = source_root / "examples"
+        source_custom = source_root / "custom"
+        target_defaults = target_root / "examples"
+        target_custom = target_root / "custom"
+        target_defaults.mkdir(parents=True, exist_ok=True)
+        target_custom.mkdir(parents=True, exist_ok=True)
+
+        if source_defaults.is_dir():
+            shutil.copytree(source_defaults, target_defaults, dirs_exist_ok=True)
+        if source_custom.is_dir():
+            shutil.copytree(source_custom, target_custom, dirs_exist_ok=True)
+
+        for path in sorted(source_root.glob("*.json")):
+            destination = target_custom / path.name
+            if destination.exists():
+                stem = destination.stem
+                suffix = destination.suffix
+                candidate = destination
+                counter = 2
+                while candidate.exists():
+                    candidate = destination.with_name(f"{stem}-{counter}{suffix}")
+                    counter += 1
+                destination = candidate
+            shutil.move(str(path), str(destination))
+
+        if source_root != target_root:
+            shutil.rmtree(source_defaults, ignore_errors=True)
+            shutil.rmtree(source_custom, ignore_errors=True)
+
+        self._persist_profiles_root(target_root)
+        self._refresh_profile_folder_paths()
+        self.profiles_root_changed.emit(str(target_root))
 
     def _save_game_folder(self) -> None:
         value = self._sanitize_path(self.game_folder_edit.text())

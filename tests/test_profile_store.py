@@ -35,6 +35,7 @@ def test_profile_file_round_trip_is_versioned_and_deterministic(
         "excluded_conversion_sources": {"fire": ["physical"]},
         "masteries": ["", ""],
         "name": "Bleed Werewolf",
+        "grade_display_style": "full",
         "resistance_cap_enabled": True,
         "resistance_cap_weights": {"fire_resistance": 0},
         "saved_db_hash": "",

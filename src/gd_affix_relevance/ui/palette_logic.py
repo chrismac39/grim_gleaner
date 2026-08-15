@@ -228,7 +228,7 @@ class PaletteLogicPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 28)
-        layout.setSpacing(14)
+        layout.setSpacing(10)
 
         heading = QLabel("Color Palette", self)
         heading.setObjectName("pageTitle")

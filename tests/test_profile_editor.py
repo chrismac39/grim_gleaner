@@ -201,3 +201,4 @@ def test_editor_exposes_default_and_custom_profile_selectors(
     editor.default_profile_selector.setCurrentIndex(0)
     assert editor._apply_selected_default_profile()
     assert editor.profile.name == "Default One"
+    assert editor.default_profile_selector.property("activeLoaded") is True

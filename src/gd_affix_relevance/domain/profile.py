@@ -20,6 +20,16 @@ WEIGHT_LABELS = (
     "Important",
     "Core",
 )
+GRADE_DISPLAY_STYLE_FULL = "full"
+GRADE_DISPLAY_STYLE_ITEM_ONLY = "item_only"
+GRADE_DISPLAY_STYLE_AFFIX_ONLY = "affix_only"
+GRADE_DISPLAY_STYLES = frozenset(
+    {
+        GRADE_DISPLAY_STYLE_FULL,
+        GRADE_DISPLAY_STYLE_ITEM_ONLY,
+        GRADE_DISPLAY_STYLE_AFFIX_ONLY,
+    }
+)
 
 
 @dataclass(slots=True)
@@ -42,6 +52,7 @@ class BuildProfile:
     saved_db_hash: str = ""
     saved_steam_build_id: str = ""
     saved_patch_versions: str = ""
+    grade_display_style: str = GRADE_DISPLAY_STYLE_FULL
 
     def __post_init__(self) -> None:
         supplied_weights = dict(self.weights)
@@ -72,6 +83,15 @@ class BuildProfile:
         self.resistance_cap_weights.clear()
         for stat_id, weight in supplied_cap_weights.items():
             self.set_resistance_cap_weight(stat_id, weight)
+        if not isinstance(self.grade_display_style, str):
+            raise TypeError("grade display style must be a string")
+        normalized_style = self.grade_display_style.strip().casefold()
+        if normalized_style not in GRADE_DISPLAY_STYLES:
+            raise ValueError(
+                "grade display style must be one of "
+                f"{sorted(GRADE_DISPLAY_STYLES)}"
+            )
+        self.grade_display_style = normalized_style
 
     def weight_for(self, stat_id: str) -> int:
         return self.weights.get(stat_id, MIN_STAT_WEIGHT)
@@ -212,6 +232,7 @@ class BuildProfile:
             "saved_db_hash": self.saved_db_hash,
             "saved_steam_build_id": self.saved_steam_build_id,
             "saved_patch_versions": self.saved_patch_versions,
+            "grade_display_style": self.grade_display_style,
             "excluded_conversion_sources": {
                 destination: sorted(sources)
                 for destination, sources in sorted(
@@ -238,6 +259,9 @@ class BuildProfile:
         raw_saved_db_hash = payload.get("saved_db_hash", "")
         raw_saved_steam_build_id = payload.get("saved_steam_build_id", "")
         raw_saved_patch_versions = payload.get("saved_patch_versions", "")
+        raw_grade_display_style = payload.get(
+            "grade_display_style", GRADE_DISPLAY_STYLE_FULL
+        )
         if not isinstance(name, str):
             raise TypeError("profile name must be a string")
         if not isinstance(raw_weights, dict):
@@ -260,6 +284,8 @@ class BuildProfile:
             raise TypeError("profile saved steam build ID must be a string")
         if not isinstance(raw_saved_patch_versions, str):
             raise TypeError("profile saved patch versions must be a string")
+        if not isinstance(raw_grade_display_style, str):
+            raise TypeError("profile grade display style must be a string")
 
         profile = cls(
             name=name,
@@ -268,6 +294,7 @@ class BuildProfile:
             saved_db_hash=raw_saved_db_hash,
             saved_steam_build_id=raw_saved_steam_build_id,
             saved_patch_versions=raw_saved_patch_versions,
+            grade_display_style=raw_grade_display_style,
         )
         for stat_id, weight in raw_weights.items():
             if not isinstance(stat_id, str):

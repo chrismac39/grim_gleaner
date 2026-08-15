@@ -94,3 +94,12 @@ def test_resistance_cap_weights_inherit_until_explicitly_overridden() -> None:
     assert restored.resistance_cap_enabled
     assert restored.resistance_cap_weights == {"fire_resistance": 0}
     assert restored.resistance_cap_weight_for("fire_resistance") == 0
+
+
+def test_grade_display_style_round_trip_and_validation() -> None:
+    profile = BuildProfile(grade_display_style="item_only")
+    restored = BuildProfile.from_dict(profile.to_dict())
+    assert restored.grade_display_style == "item_only"
+
+    with pytest.raises(ValueError, match="grade display style"):
+        BuildProfile(grade_display_style="unknown")

@@ -13,6 +13,7 @@ from gd_affix_relevance.catalog import (
     AffixVariantDefinition,
 )
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.profile_store import save_profile
 from gd_affix_relevance.ui.generate_output import GenerateOutputPage
 
 
@@ -43,7 +44,13 @@ def _catalog() -> AffixCatalog:
     )
 
 
-def _page(tmp_path: Path, game: Path, bundled: Path) -> GenerateOutputPage:
+def _page(
+    tmp_path: Path,
+    game: Path,
+    bundled: Path,
+    *,
+    profiles_root: Path | None = None,
+) -> GenerateOutputPage:
     settings = QSettings(
         str(tmp_path / "settings.ini"), QSettings.Format.IniFormat
     )
@@ -54,6 +61,7 @@ def _page(tmp_path: Path, game: Path, bundled: Path) -> GenerateOutputPage:
         source_root=bundled,
         output_root=tmp_path / "staging" / "text_en",
         backups_root=tmp_path / "backups",
+        profiles_root=profiles_root,
         settings=settings,
     )
 
@@ -246,3 +254,40 @@ def test_export_page_rejects_existing_folder_without_executable(
 
     assert page.generate_button.isEnabled()
     assert str(game / "settings" / "text_en") in page.target_label.text()
+
+
+def test_export_page_lists_default_and_custom_profiles(
+    tmp_path: Path,
+) -> None:
+    _application()
+    bundled = tmp_path / "app" / "tags"
+    bundled.mkdir(parents=True)
+    (bundled / "tags_items.txt").write_text(
+        "tagHealthy=Bundled Healthy\n",
+        encoding="utf-8",
+    )
+    game = tmp_path / "Grim Dawn"
+    game.mkdir()
+    (game / "Grim Dawn.exe").touch()
+    profiles_root = tmp_path / "profiles"
+    (profiles_root / "examples").mkdir(parents=True)
+    save_profile(
+        BuildProfile("Example One", {"health": 4}),
+        profiles_root / "examples" / "Example One.json",
+    )
+
+    page = _page(tmp_path, game, bundled, profiles_root=profiles_root)
+
+    assert page.default_profile_selector.isEnabled()
+    assert page.default_profile_selector.count() == 1
+    assert not page.custom_profile_selector.isEnabled()
+    assert page.custom_profile_selector.currentText() == "No custom profiles saved yet"
+
+    save_profile(
+        BuildProfile("Custom One", {"movement_speed": 2}),
+        profiles_root / "custom" / "Custom One.json",
+    )
+    page.refresh_profile_selectors()
+
+    assert page.custom_profile_selector.isEnabled()
+    assert page.custom_profile_selector.count() == 1

@@ -29,6 +29,7 @@ from gd_affix_relevance.grade_export import (
     restore_game_backup,
 )
 from gd_affix_relevance.output import build_affix_markers, build_unique_item_markers
+from gd_affix_relevance.profile_store import load_profile
 from gd_affix_relevance.ui.settings import (
     GAME_FOLDER_SETTING,
     PALETTE_FILE_SETTING,
@@ -47,6 +48,7 @@ class GenerateOutputPage(QWidget):
         source_root: Path,
         output_root: Path,
         backups_root: Path,
+        profiles_root: Path | None = None,
         catalog_status: str = "",
         settings: QSettings | None = None,
         parent: QWidget | None = None,
@@ -60,6 +62,14 @@ class GenerateOutputPage(QWidget):
         self.bundled_source_root = Path(source_root)
         self.staging_root = Path(output_root)
         self.backups_root = Path(backups_root)
+        self.profiles_root = (
+            Path(profiles_root).expanduser().resolve()
+            if profiles_root is not None
+            else (Path.cwd() / "artifacts" / "profiles").resolve()
+        )
+        self.custom_profiles_root = self.profiles_root / "custom"
+        self._default_profile_paths: list[Path] = []
+        self._custom_profile_paths: list[Path] = []
         self.last_result: GradeExportResult | None = None
         self._snapshot_ids: list[str] = []
 
@@ -102,6 +112,44 @@ class GenerateOutputPage(QWidget):
         action_row.addStretch()
         layout.addLayout(action_row)
 
+        default_row = QHBoxLayout()
+        default_row.setSpacing(8)
+        default_label = QLabel("Switch default profile", self)
+        default_label.setObjectName("fieldLabel")
+        default_row.addWidget(default_label)
+        self.default_profile_selector = QComboBox(self)
+        self.default_profile_selector.setObjectName("profileSwapSelector")
+        default_row.addWidget(self.default_profile_selector, 1)
+        self.apply_default_profile_button = QPushButton(
+            "Export Selected Default",
+            self,
+        )
+        self.apply_default_profile_button.setObjectName("profileAction")
+        self.apply_default_profile_button.clicked.connect(
+            self.export_selected_default
+        )
+        default_row.addWidget(self.apply_default_profile_button)
+        layout.addLayout(default_row)
+
+        custom_row = QHBoxLayout()
+        custom_row.setSpacing(8)
+        custom_label = QLabel("Switch custom profile", self)
+        custom_label.setObjectName("fieldLabel")
+        custom_row.addWidget(custom_label)
+        self.custom_profile_selector = QComboBox(self)
+        self.custom_profile_selector.setObjectName("profileSwapSelector")
+        custom_row.addWidget(self.custom_profile_selector, 1)
+        self.apply_custom_profile_button = QPushButton(
+            "Export Selected Custom",
+            self,
+        )
+        self.apply_custom_profile_button.setObjectName("profileAction")
+        self.apply_custom_profile_button.clicked.connect(
+            self.export_selected_custom
+        )
+        custom_row.addWidget(self.apply_custom_profile_button)
+        layout.addLayout(custom_row)
+
         switch_row = QHBoxLayout()
         switch_row.setSpacing(8)
         switch_label = QLabel("Switch saved profile grades", self)
@@ -138,9 +186,47 @@ class GenerateOutputPage(QWidget):
         last_export_row.addStretch()
         layout.addLayout(last_export_row)
         layout.addStretch()
+        self._refresh_profile_selectors()
         self.refresh_game_location()
 
+    def set_profiles_root(self, profiles_root: Path) -> None:
+        self.profiles_root = Path(profiles_root).expanduser().resolve()
+        self.custom_profiles_root = self.profiles_root / "custom"
+        self._refresh_profile_selectors()
+
+    def refresh_profile_selectors(self) -> None:
+        self._refresh_profile_selectors()
+
     def generate(self, _checked: bool = False) -> None:
+        if self.catalog is None:
+            return
+        self._export_with_profile(self.profile)
+
+    def export_selected_default(self, _checked: bool = False) -> None:
+        if not self._default_profile_paths:
+            return
+        index = self.default_profile_selector.currentIndex()
+        if index < 0 or index >= len(self._default_profile_paths):
+            return
+        self._export_from_path(self._default_profile_paths[index])
+
+    def export_selected_custom(self, _checked: bool = False) -> None:
+        if not self._custom_profile_paths:
+            return
+        index = self.custom_profile_selector.currentIndex()
+        if index < 0 or index >= len(self._custom_profile_paths):
+            return
+        self._export_from_path(self._custom_profile_paths[index])
+
+    def _export_from_path(self, path: Path) -> None:
+        try:
+            export_profile = load_profile(path)
+        except (OSError, ValueError, TypeError) as error:
+            QMessageBox.critical(self, "Could Not Load Profile", str(error))
+            return
+        self._export_with_profile(export_profile)
+
+    def _export_with_profile(self, export_profile: BuildProfile) -> None:
         if self.catalog is None:
             return
         try:
@@ -150,12 +236,14 @@ class GenerateOutputPage(QWidget):
             QMessageBox.critical(self, "Could Not Export Grades", str(error))
             return
 
-        affix_count = len(build_affix_markers(self.catalog, self.profile))
-        unique_count = len(build_unique_item_markers(self.items, self.profile))
+        affix_count = len(build_affix_markers(self.catalog, export_profile))
+        unique_count = len(build_unique_item_markers(self.items, export_profile))
+        profile_name = export_profile.name.strip() or "Unnamed Profile"
         choice = QMessageBox.question(
             self,
             "Export Grades",
-            "About to apply grade tags to "
+            f"About to export grades for {profile_name}. "
+            "\nAbout to apply grade tags to "
             f"{affix_count} affix and {unique_count} unique item entries. "
             "Proceed?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
@@ -171,7 +259,7 @@ class GenerateOutputPage(QWidget):
                 self.staging_root,
                 self.backups_root,
                 self.catalog,
-                self.profile,
+                export_profile,
                 items=self.items,
                 palette_file=self._configured_palette_file(),
             )
@@ -190,13 +278,73 @@ class GenerateOutputPage(QWidget):
             f"\nExported grades to {result.target_root}. "
             f"\nUpdated {result.generation.annotated_lines} localization entries. "
         )
-        exported_name = self.profile.name.strip() or "Unnamed Profile"
+        exported_name = export_profile.name.strip() or "Unnamed Profile"
         self.last_exported_profile.setText(exported_name)
         if self.settings is not None:
             self.settings.setValue(LAST_EXPORTED_PROFILE_SETTING, exported_name)
             self.settings.sync()
         self.refresh_game_location(update_status=False)
         self._refresh_snapshot_selector()
+
+    def _discover_default_profile_paths(self) -> tuple[Path, ...]:
+        examples = self.profiles_root / "examples"
+        if not examples.is_dir():
+            return ()
+        return tuple(
+            sorted(
+                (path for path in examples.glob("*.json") if path.is_file()),
+                key=lambda path: path.name.casefold(),
+            )
+        )
+
+    def _list_custom_profile_paths(self) -> tuple[Path, ...]:
+        defaults = set(self._default_profile_paths)
+        return tuple(
+            sorted(
+                (
+                    path
+                    for path in self.profiles_root.rglob("*.json")
+                    if path.is_file() and path not in defaults
+                ),
+                key=lambda path: path.name.casefold(),
+            )
+        )
+
+    def _refresh_profile_selectors(self) -> None:
+        self._default_profile_paths = list(self._discover_default_profile_paths())
+        self._custom_profile_paths = list(self._list_custom_profile_paths())
+
+        self.default_profile_selector.blockSignals(True)
+        self.default_profile_selector.clear()
+        for path in self._default_profile_paths:
+            self.default_profile_selector.addItem(self._selector_label(path))
+        self.default_profile_selector.blockSignals(False)
+        self.apply_default_profile_button.setEnabled(bool(self._default_profile_paths))
+        if not self._default_profile_paths:
+            self.default_profile_selector.addItem("No default profiles found")
+            self.default_profile_selector.setEnabled(False)
+            self.apply_default_profile_button.setEnabled(False)
+        else:
+            self.default_profile_selector.setEnabled(True)
+
+        self.custom_profile_selector.blockSignals(True)
+        self.custom_profile_selector.clear()
+        for path in self._custom_profile_paths:
+            self.custom_profile_selector.addItem(self._selector_label(path))
+        self.custom_profile_selector.blockSignals(False)
+        has_custom = bool(self._custom_profile_paths)
+        self.custom_profile_selector.setEnabled(has_custom)
+        self.apply_custom_profile_button.setEnabled(has_custom)
+        if not has_custom:
+            self.custom_profile_selector.addItem("No custom profiles saved yet")
+            self.custom_profile_selector.setEnabled(False)
+            self.apply_custom_profile_button.setEnabled(False)
+
+    def _selector_label(self, path: Path) -> str:
+        try:
+            return path.relative_to(self.profiles_root).as_posix()
+        except ValueError:
+            return path.name
 
     def restore_backup(self, _checked: bool = False) -> None:
         try:
@@ -334,6 +482,10 @@ class GenerateOutputPage(QWidget):
             )
             self.generate_button.setEnabled(False)
             self.restore_button.setEnabled(False)
+            self.default_profile_selector.setEnabled(False)
+            self.custom_profile_selector.setEnabled(False)
+            self.apply_default_profile_button.setEnabled(False)
+            self.apply_custom_profile_button.setEnabled(False)
             self.snapshot_selector.setEnabled(False)
             self.apply_snapshot_button.setEnabled(False)
             if update_status:
@@ -344,6 +496,7 @@ class GenerateOutputPage(QWidget):
         self.restore_button.setEnabled(
             backup_available(game_folder, self.backups_root)
         )
+        self._refresh_profile_selectors()
         self._refresh_snapshot_selector()
 
     def _configured_game_folder(self) -> Path:
