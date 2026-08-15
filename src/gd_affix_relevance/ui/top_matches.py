@@ -675,8 +675,28 @@ class TopMatchesPage(QWidget):
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
 
+        badge_row = QWidget(self)
+        badge_row.setObjectName("versionBadgeRow")
+        badge_layout = QHBoxLayout(badge_row)
+        badge_layout.setContentsMargins(0, 0, 0, 0)
+        badge_layout.setSpacing(8)
+        self.profile_badge = QLabel(badge_row)
+        self.profile_badge.setObjectName("versionBadge")
+        self.profile_badge.setProperty("kind", "profile")
+        badge_layout.addWidget(self.profile_badge)
+        self.current_badge = QLabel(badge_row)
+        self.current_badge.setObjectName("versionBadge")
+        self.current_badge.setProperty("kind", "current")
+        badge_layout.addWidget(self.current_badge)
+        self.sync_badge = QLabel(badge_row)
+        self.sync_badge.setObjectName("versionStatusBadge")
+        self.sync_badge.setProperty("syncState", "unknown")
+        badge_layout.addWidget(self.sync_badge)
+        badge_layout.addStretch()
+        layout.addWidget(badge_row)
+
         self.version_blurb = QLabel(self)
-        self.version_blurb.setObjectName("pageHint")
+        self.version_blurb.setObjectName("versionBadgeDetail")
         self.version_blurb.setWordWrap(True)
         layout.addWidget(self.version_blurb)
 
@@ -721,10 +741,10 @@ class TopMatchesPage(QWidget):
 
     def refresh_version_blurb(self) -> None:
         if self.settings is None:
-            self.version_blurb.setText(
-                "Version status: game folder settings unavailable; cannot compare "
-                "current game snapshot with profile metadata."
-            )
+            self.profile_badge.setText("Profile: not stamped")
+            self.current_badge.setText("Current: settings unavailable")
+            self._set_sync_badge("unknown", "? Unknown")
+            self.version_blurb.setText("Game folder settings unavailable.")
             return
         raw_game_folder = self.settings.value(
             GAME_FOLDER_SETTING,
@@ -732,9 +752,11 @@ class TopMatchesPage(QWidget):
             type=str,
         ).strip()
         if not raw_game_folder:
+            self.profile_badge.setText("Profile: not stamped")
+            self.current_badge.setText("Current: folder not set")
+            self._set_sync_badge("unknown", "? Unknown")
             self.version_blurb.setText(
-                "Version status: set Grim Dawn folder in Settings to enable "
-                "DB hash/build/patch compatibility checks."
+                "Set Grim Dawn folder in Settings, then save profile to stamp version metadata."
             )
             return
 
@@ -746,23 +768,53 @@ class TopMatchesPage(QWidget):
         )
         state = evaluate_profile_snapshot_match(current, profile_snapshot)
         if state == "match":
-            summary = "Loaded profile snapshot matches current game DB hash."
+            summary = "Profile snapshot matches current install."
+            status_text = "✓ In Sync"
         elif state == "mismatch":
-            summary = "Loaded profile snapshot does not match current game DB hash."
+            summary = "Profile snapshot differs from current install."
+            status_text = "✕ Out of Sync"
         else:
             summary = (
-                "Loaded profile snapshot is unavailable; save the profile to record "
-                "its game snapshot metadata."
+                "Profile snapshot unavailable; save profile to record game metadata."
             )
+            status_text = "? Unknown"
 
-        self.version_blurb.setText(
-            f"Version status: {summary} "
-            f"Current: hash={current.db_hash}, steam_build_id={current.steam_build_id}, "
-            f"patch_versions={current.patch_versions}. "
-            f"Profile: hash={profile_snapshot.db_hash}, "
-            f"steam_build_id={profile_snapshot.steam_build_id}, "
-            f"patch_versions={profile_snapshot.patch_versions}."
+        self.profile_badge.setText(
+            "Profile "
+            f"hash {self._short_hash(profile_snapshot.db_hash)}  "
+            f"patch {profile_snapshot.patch_versions}"
         )
+        self.current_badge.setText(
+            "Current "
+            f"hash {self._short_hash(current.db_hash)}  "
+            f"patch {current.patch_versions}"
+        )
+        self._set_sync_badge(state, status_text)
+        self.profile_badge.setToolTip(
+            "Profile snapshot: "
+            f"hash={profile_snapshot.db_hash}, "
+            f"steam_build_id={profile_snapshot.steam_build_id}, "
+            f"patch_versions={profile_snapshot.patch_versions}"
+        )
+        self.current_badge.setToolTip(
+            "Current install snapshot: "
+            f"hash={current.db_hash}, "
+            f"steam_build_id={current.steam_build_id}, "
+            f"patch_versions={current.patch_versions}"
+        )
+        self.version_blurb.setText(summary)
+
+    def _short_hash(self, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not normalized or normalized == "unknown":
+            return "unknown"
+        return value[:8]
+
+    def _set_sync_badge(self, state: str, text: str) -> None:
+        self.sync_badge.setText(text)
+        self.sync_badge.setProperty("syncState", state)
+        self.sync_badge.style().unpolish(self.sync_badge)
+        self.sync_badge.style().polish(self.sync_badge)
 
     def _build_affix_tab(self) -> QWidget:
         tab = QWidget(self)

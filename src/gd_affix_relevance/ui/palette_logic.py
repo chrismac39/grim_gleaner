@@ -234,8 +234,28 @@ class PaletteLogicPage(QWidget):
         tip.setWordWrap(True)
         layout.addWidget(tip)
 
+        badge_row = QWidget(self)
+        badge_row.setObjectName("versionBadgeRow")
+        badge_layout = QHBoxLayout(badge_row)
+        badge_layout.setContentsMargins(0, 0, 0, 0)
+        badge_layout.setSpacing(8)
+        self.profile_badge = QLabel(badge_row)
+        self.profile_badge.setObjectName("versionBadge")
+        self.profile_badge.setProperty("kind", "profile")
+        badge_layout.addWidget(self.profile_badge)
+        self.current_badge = QLabel(badge_row)
+        self.current_badge.setObjectName("versionBadge")
+        self.current_badge.setProperty("kind", "current")
+        badge_layout.addWidget(self.current_badge)
+        self.sync_badge = QLabel(badge_row)
+        self.sync_badge.setObjectName("versionStatusBadge")
+        self.sync_badge.setProperty("syncState", "unknown")
+        badge_layout.addWidget(self.sync_badge)
+        badge_layout.addStretch()
+        layout.addWidget(badge_row)
+
         self.version_blurb = QLabel(self)
-        self.version_blurb.setObjectName("pageHint")
+        self.version_blurb.setObjectName("versionBadgeDetail")
         self.version_blurb.setWordWrap(True)
         layout.addWidget(self.version_blurb)
 
@@ -305,31 +325,64 @@ class PaletteLogicPage(QWidget):
             else snapshot_from_profile_fields("", "", "")
         )
         if snapshot is None:
+            self.profile_badge.setText("Profile: not stamped")
+            self.current_badge.setText("Current: folder not set")
+            self._set_sync_badge("unknown", "? Unknown")
             self.version_blurb.setText(
-                "Version status: configure a Grim Dawn folder in Settings to "
-                "compare game DB hash/patch/build with the loaded profile."
+                "Set Grim Dawn folder in Settings, then save profile to stamp hash/build/patch metadata."
             )
             return
 
         match_state = evaluate_profile_snapshot_match(snapshot, profile_snapshot)
         if match_state == "match":
-            summary = "Loaded profile snapshot matches current game DB hash."
+            summary = "Profile snapshot matches current install."
+            status_text = "✓ In Sync"
         elif match_state == "mismatch":
-            summary = "Loaded profile snapshot does not match the current game DB hash."
+            summary = "Profile snapshot differs from current install."
+            status_text = "✕ Out of Sync"
         else:
             summary = (
-                "Loaded profile snapshot is unavailable; save the profile after "
-                "setting your game folder to stamp version metadata."
+                "Profile snapshot unavailable; save profile to stamp version metadata."
             )
+            status_text = "? Unknown"
 
-        self.version_blurb.setText(
-            f"Version status: {summary} "
-            f"Current: hash={snapshot.db_hash}, steam_build_id={snapshot.steam_build_id}, "
-            f"patch_versions={snapshot.patch_versions}. "
-            f"Profile: hash={profile_snapshot.db_hash}, "
-            f"steam_build_id={profile_snapshot.steam_build_id}, "
-            f"patch_versions={profile_snapshot.patch_versions}."
+        self.profile_badge.setText(
+            "Profile "
+            f"hash {self._short_hash(profile_snapshot.db_hash)}  "
+            f"patch {profile_snapshot.patch_versions}"
         )
+        self.current_badge.setText(
+            "Current "
+            f"hash {self._short_hash(snapshot.db_hash)}  "
+            f"patch {snapshot.patch_versions}"
+        )
+        self._set_sync_badge(match_state, status_text)
+        self.profile_badge.setToolTip(
+            "Profile snapshot: "
+            f"hash={profile_snapshot.db_hash}, "
+            f"steam_build_id={profile_snapshot.steam_build_id}, "
+            f"patch_versions={profile_snapshot.patch_versions}"
+        )
+        self.current_badge.setToolTip(
+            "Current install snapshot: "
+            f"hash={snapshot.db_hash}, "
+            f"steam_build_id={snapshot.steam_build_id}, "
+            f"patch_versions={snapshot.patch_versions}"
+        )
+
+        self.version_blurb.setText(summary)
+
+    def _short_hash(self, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not normalized or normalized == "unknown":
+            return "unknown"
+        return value[:8]
+
+    def _set_sync_badge(self, state: str, text: str) -> None:
+        self.sync_badge.setText(text)
+        self.sync_badge.setProperty("syncState", state)
+        self.sync_badge.style().unpolish(self.sync_badge)
+        self.sync_badge.style().polish(self.sync_badge)
 
     def _compute_label_width(self) -> int:
         keys = [key for _, section_keys in _SECTION_KEYS for key in section_keys]
