@@ -110,11 +110,6 @@ def marker_palette_from_values(
 
     def _grade_code(key: str) -> str:
         if key in raw_values:
-            if (
-                "marker.generated" in raw_values
-                and raw_values.get(key) == defaults.get(key)
-            ):
-                return merged.get("marker.generated", "c")
             return merged.get(key, merged.get("marker.generated", "c"))
         if "marker.generated" in raw_values:
             return merged.get("marker.generated", "c")

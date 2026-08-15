@@ -1508,7 +1508,7 @@ class TopMatchesPage(QWidget):
         }
 
         affix_hex = rarity_hex["rare"]
-        item_hex = rarity_hex["epic"]
+        item_hex = self._code_to_hex(values.get("marker.default", "e"), "#8f6b24")
         grade_hex = {
             "F0": self._code_to_hex(
                 palette.grade_color_codes.get("F", palette.generated_color_code),
