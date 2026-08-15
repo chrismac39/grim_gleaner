@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -18,9 +19,13 @@ from gd_affix_relevance.catalog import AffixCatalog, ItemCatalog
 from gd_affix_relevance.domain import BuildProfile
 from gd_affix_relevance.grade_export import (
     GradeExportResult,
+    GradeSnapshotApplyResult,
+    ProfileGradeSnapshot,
+    apply_profile_grade_snapshot,
     backup_available,
     export_grades_to_game,
     grim_dawn_text_root,
+    list_profile_grade_snapshots,
     restore_game_backup,
 )
 from gd_affix_relevance.output import build_affix_markers, build_unique_item_markers
@@ -56,6 +61,7 @@ class GenerateOutputPage(QWidget):
         self.staging_root = Path(output_root)
         self.backups_root = Path(backups_root)
         self.last_result: GradeExportResult | None = None
+        self._snapshot_ids: list[str] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 28)
@@ -95,6 +101,23 @@ class GenerateOutputPage(QWidget):
         action_row.addWidget(self.restore_button)
         action_row.addStretch()
         layout.addLayout(action_row)
+
+        switch_row = QHBoxLayout()
+        switch_row.setSpacing(8)
+        switch_label = QLabel("Switch saved profile grades", self)
+        switch_label.setObjectName("fieldLabel")
+        switch_row.addWidget(switch_label)
+        self.snapshot_selector = QComboBox(self)
+        self.snapshot_selector.setObjectName("profileSwapSelector")
+        switch_row.addWidget(self.snapshot_selector, 1)
+        self.apply_snapshot_button = QPushButton(
+            "Apply Selected Profile Grades",
+            self,
+        )
+        self.apply_snapshot_button.setObjectName("profileAction")
+        self.apply_snapshot_button.clicked.connect(self.apply_selected_snapshot)
+        switch_row.addWidget(self.apply_snapshot_button)
+        layout.addLayout(switch_row)
 
         self.status = QLabel(self)
         self.status.setObjectName("pageHint")
@@ -173,6 +196,7 @@ class GenerateOutputPage(QWidget):
             self.settings.setValue(LAST_EXPORTED_PROFILE_SETTING, exported_name)
             self.settings.sync()
         self.refresh_game_location(update_status=False)
+        self._refresh_snapshot_selector()
 
     def restore_backup(self, _checked: bool = False) -> None:
         try:
@@ -211,6 +235,89 @@ class GenerateOutputPage(QWidget):
         self.status.setText(message)
         self.last_result = None
         self.refresh_game_location(update_status=False)
+        self._refresh_snapshot_selector()
+
+    def apply_selected_snapshot(self, _checked: bool = False) -> None:
+        try:
+            game_folder = self._configured_game_folder()
+            grim_dawn_text_root(game_folder)
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "Could Not Apply Saved Grades", str(error))
+            return
+
+        index = self.snapshot_selector.currentIndex()
+        if index < 0 or index >= len(self._snapshot_ids):
+            QMessageBox.warning(
+                self,
+                "No Saved Profile Grades",
+                "Export at least one profile first, then choose it from the selector.",
+            )
+            return
+
+        snapshot_id = self._snapshot_ids[index]
+        selected_name = self.snapshot_selector.currentText().strip()
+        choice = QMessageBox.question(
+            self,
+            "Apply Saved Profile Grades",
+            "About to replace current graded localization with selected saved profile "
+            f"grades ({selected_name}). Proceed?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if choice != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            result = apply_profile_grade_snapshot(
+                game_folder,
+                self.backups_root,
+                snapshot_id,
+            )
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "Could Not Apply Saved Grades", str(error))
+            return
+
+        self._apply_snapshot_result(result)
+        self.refresh_game_location(update_status=False)
+
+    def _apply_snapshot_result(self, result: GradeSnapshotApplyResult) -> None:
+        backup_status = (
+            "Created the original-state backup."
+            if result.backup_created
+            else "Preserved the existing original-state backup."
+        )
+        self.status.setText(
+            f"{backup_status}"
+            f"\nApplied saved grades for {result.profile_name} to {result.target_root}."
+            f"\nInstalled {result.files_installed} localization files."
+        )
+        self.last_exported_profile.setText(result.profile_name)
+        if self.settings is not None:
+            self.settings.setValue(
+                LAST_EXPORTED_PROFILE_SETTING,
+                result.profile_name,
+            )
+            self.settings.sync()
+
+    def _refresh_snapshot_selector(self) -> None:
+        snapshots = list_profile_grade_snapshots(self.backups_root)
+        self.snapshot_selector.blockSignals(True)
+        self.snapshot_selector.clear()
+        self._snapshot_ids = []
+        for snapshot in snapshots:
+            timestamp = snapshot.created_at.replace("T", " ")[:16]
+            self.snapshot_selector.addItem(
+                f"{snapshot.profile_name} ({timestamp})"
+            )
+            self._snapshot_ids.append(snapshot.snapshot_id)
+        self.snapshot_selector.blockSignals(False)
+        has_options = bool(self._snapshot_ids)
+        self.snapshot_selector.setEnabled(has_options)
+        self.apply_snapshot_button.setEnabled(has_options)
+        if not has_options:
+            self.snapshot_selector.addItem("No saved profile-grade exports yet")
+            self.snapshot_selector.setEnabled(False)
+            self.apply_snapshot_button.setEnabled(False)
 
     def refresh_game_location(
         self,
@@ -227,6 +334,8 @@ class GenerateOutputPage(QWidget):
             )
             self.generate_button.setEnabled(False)
             self.restore_button.setEnabled(False)
+            self.snapshot_selector.setEnabled(False)
+            self.apply_snapshot_button.setEnabled(False)
             if update_status:
                 self.status.setText("A valid Grim Dawn folder is required.")
             return
@@ -235,6 +344,7 @@ class GenerateOutputPage(QWidget):
         self.restore_button.setEnabled(
             backup_available(game_folder, self.backups_root)
         )
+        self._refresh_snapshot_selector()
 
     def _configured_game_folder(self) -> Path:
         if self.settings is None:

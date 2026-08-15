@@ -48,7 +48,9 @@ class GuidePage(QWidget):
             "3. Choose your masteries and add any build-relevant skills.\n"
             "4. Review Gear Grades for affixes, unique items, and add-ons.\n"
             "5. Use Export Grades to apply the active profile's labels in game.\n"
-            "6. Use Restore Backups to return item localization to its pre-export state.",
+            "6. Later, use Switch saved profile grades on Export Grades to apply a "
+            "previously exported profile instantly (no file picker).\n"
+            "7. Use Restore Backups to return item localization to its pre-export state.",
             content,
         )
         _add_section(
@@ -77,9 +79,11 @@ class GuidePage(QWidget):
             content_layout,
             "Export and profiles",
             "Save and Load default to Grim Gleaner's Profiles folder. Export "
-            "uses existing installed item-tag files when present "
-            "and bundled English files for anything missing. The first export preserves an "
-            "original-state backup; repeated exports do not overwrite it.",
+            "uses your current settings/text_en as the working source, applies the "
+            "active profile grades, and writes the updated graded output back in place. "
+            "Each export also saves a reusable profile-grade snapshot for quick switching "
+            "from the Export Grades page. The first export preserves an original-state "
+            "backup; repeated exports do not overwrite that baseline backup.",
             content,
         )
         _add_section(

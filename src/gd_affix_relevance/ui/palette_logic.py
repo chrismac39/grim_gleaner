@@ -216,24 +216,6 @@ class PaletteLogicPage(QWidget):
         heading.setObjectName("pageTitle")
         layout.addWidget(heading)
 
-        introduction = QLabel(
-            "Choose color letters for each category below. These selectors write "
-            "a local palette file used by Export Grades.",
-            self,
-        )
-        introduction.setObjectName("pageHint")
-        introduction.setWordWrap(True)
-        layout.addWidget(introduction)
-
-        tip = QLabel(
-            "Tip: dropdowns show color letters with names. Example: damage.chaos = "
-            "p (Purple). Use Save Palette after making changes.",
-            self,
-        )
-        tip.setObjectName("pageHint")
-        tip.setWordWrap(True)
-        layout.addWidget(tip)
-
         badge_row = QWidget(self)
         badge_row.setObjectName("versionBadgeRow")
         badge_layout = QHBoxLayout(badge_row)
@@ -258,6 +240,15 @@ class PaletteLogicPage(QWidget):
         self.version_blurb.setObjectName("versionBadgeDetail")
         self.version_blurb.setWordWrap(True)
         layout.addWidget(self.version_blurb)
+
+        introduction = QLabel(
+            "Choose color letters for each category below. These selectors write "
+            "a local palette file used by Export Grades.",
+            self,
+        )
+        introduction.setObjectName("pageHint")
+        introduction.setWordWrap(True)
+        layout.addWidget(introduction)
 
         self.palette_path = QLabel(self)
         self.palette_path.setObjectName("pageHint")
@@ -335,10 +326,10 @@ class PaletteLogicPage(QWidget):
 
         match_state = evaluate_profile_snapshot_match(snapshot, profile_snapshot)
         if match_state == "match":
-            summary = "Profile snapshot matches current install."
+            summary = ""
             status_text = "✓ In Sync"
         elif match_state == "mismatch":
-            summary = "Profile snapshot differs from current install."
+            summary = ""
             status_text = "✕ Out of Sync"
         else:
             summary = (

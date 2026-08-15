@@ -192,6 +192,41 @@ def test_export_page_uses_palette_file_override_for_marker_color(
     ).read_text(encoding="utf-8")
 
 
+def test_export_page_applies_saved_profile_grade_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _application()
+    bundled = tmp_path / "app" / "tags"
+    bundled.mkdir(parents=True)
+    (bundled / "tags_items.txt").write_text(
+        "tagHealthy={^G}Bundled Healthy\n",
+        encoding="utf-8",
+    )
+    game = tmp_path / "Grim Dawn"
+    game.mkdir()
+    (game / "Grim Dawn.exe").touch()
+    page = _page(tmp_path, game, bundled)
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args: QMessageBox.StandardButton.Yes,
+    )
+
+    page.generate()
+
+    installed_file = game / "settings" / "text_en" / "tags_items.txt"
+    installed_file.write_text("tagHealthy=Mutated\n", encoding="utf-8")
+    assert "Mutated" in installed_file.read_text(encoding="utf-8")
+    assert page.apply_snapshot_button.isEnabled()
+
+    page.apply_selected_snapshot()
+
+    text = installed_file.read_text(encoding="utf-8")
+    assert "tagHealthy={^Y}[C1]: {^G}Bundled Healthy{^Y} (c1)" in text
+    assert "Applied saved grades for Health" in page.status.text()
+
+
 def test_export_page_rejects_existing_folder_without_executable(
     tmp_path: Path,
 ) -> None:

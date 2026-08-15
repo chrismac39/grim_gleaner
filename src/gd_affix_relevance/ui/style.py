@@ -205,14 +205,28 @@ QLabel#affixSlotName, QLabel#affixTableTitle {
 }
 QCheckBox { spacing: 5px; }
 QCheckBox::indicator { width: 15px; height: 15px; }
-QComboBox#minimumGradeSelector {
+QComboBox#minimumGradeSelector, QComboBox#profileSwapSelector {
     background: #242932;
     border: 1px solid #3a414d;
     border-radius: 5px;
     padding: 4px 9px;
+}
+QComboBox#profilePicker {
+    background: #242932;
+    border: 1px solid #3a414d;
+    border-radius: 5px;
+    padding: 4px 9px;
+    min-width: 260px;
+}
+QComboBox#minimumGradeSelector {
     min-width: 48px;
 }
-QComboBox#minimumGradeSelector QAbstractItemView {
+QComboBox#profileSwapSelector {
+    min-width: 260px;
+}
+QComboBox#minimumGradeSelector QAbstractItemView,
+QComboBox#profileSwapSelector QAbstractItemView,
+QComboBox#profilePicker QAbstractItemView {
     background: #20242b;
     border: 1px solid #3a414d;
     selection-background-color: #3a4454;

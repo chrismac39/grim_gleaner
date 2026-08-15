@@ -90,7 +90,7 @@ class SettingsPage(QWidget):
         self.palette_file_edit = QLineEdit(self._saved_palette_file(), self)
         self.palette_file_edit.setObjectName("outputPath")
         self.palette_file_edit.setPlaceholderText(
-            "Optional: path to palette file (key=value)"
+            "Optional: active palette file path used by Color Palette page"
         )
         self.palette_file_edit.editingFinished.connect(self._save_palette_file)
         palette_row = QWidget(self)
@@ -102,7 +102,7 @@ class SettingsPage(QWidget):
         self.browse_palette_button.setObjectName("profileAction")
         self.browse_palette_button.clicked.connect(self._browse_palette_file)
         palette_layout.addWidget(self.browse_palette_button)
-        form.addRow("Export palette file", palette_row)
+        form.addRow("Palette file override (optional)", palette_row)
         layout.addLayout(form)
 
         self.game_folder_status = QLabel(self)
@@ -114,10 +114,11 @@ class SettingsPage(QWidget):
         layout.addWidget(self.palette_file_status)
 
         note = QLabel(
-            "Export Grades checks this folder's settings/text_en directory for "
-            "existing item-tag files. Installed files take precedence and the "
-            "bundled clean-install tags fill any missing files. Export writes "
-            "the graded files there after preserving an original-state backup.",
+            "Export Grades uses this folder's settings/text_en as the working "
+            "source, applies the active profile's current grades to item tags, "
+            "and writes the result back to settings/text_en (replacing prior "
+            "graded output). On first export, Grim Gleaner creates an "
+            "original-state backup so Restore Backups can revert cleanly.",
             self,
         )
         note.setObjectName("pageHint")
@@ -254,19 +255,19 @@ class SettingsPage(QWidget):
         if not value:
             self.palette_file_status.setObjectName("pageHint")
             self.palette_file_status.setText(
-                "Using built-in Python palette defaults for export markers."
+                "No palette file override path is set. Color Palette will use its default active path."
             )
         else:
             palette_path = Path(value)
             if palette_path.is_file():
                 self.palette_file_status.setObjectName("gameFolderConfirmed")
                 self.palette_file_status.setText(
-                    f"Palette override file selected: {palette_path}"
+                    f"Active palette file (same path shown on Color Palette page): {palette_path}"
                 )
             else:
                 self.palette_file_status.setObjectName("gameFolderWarning")
                 self.palette_file_status.setText(
-                    "Not confirmed: palette file path does not exist."
+                    "Not confirmed: configured active palette path does not exist."
                 )
         self.palette_file_status.style().unpolish(self.palette_file_status)
         self.palette_file_status.style().polish(self.palette_file_status)

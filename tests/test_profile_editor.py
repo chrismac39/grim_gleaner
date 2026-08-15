@@ -172,3 +172,32 @@ def test_confirm_close_allows_clean_or_discarded_profile() -> None:
         lambda: QMessageBox.StandardButton.Discard
     )
     assert editor.confirm_close()
+
+
+def test_editor_exposes_default_and_custom_profile_selectors(
+    tmp_path: Path,
+) -> None:
+    _application()
+    profiles_root = tmp_path / "profiles"
+    defaults_root = profiles_root / "examples"
+    profiles_root.mkdir(parents=True)
+    defaults_root.mkdir(parents=True)
+    save_profile(BuildProfile("Default One", {"health": 1}), profiles_root / "Default One.json")
+    save_profile(BuildProfile("Example Two", {"movement_speed": 2}), defaults_root / "Example Two.json")
+
+    editor = ProfileEditor(BuildProfile("Custom Build", {"health": 4}), profiles_root=profiles_root)
+    editor.show()
+
+    assert editor.default_profile_selector.count() == 2
+    assert not editor.custom_profile_selector.isEnabled()
+    assert editor.custom_profile_selector.currentText() == "No custom profiles saved yet"
+
+    editor.save_button.click()
+
+    assert editor.custom_profile_selector.isEnabled()
+    assert editor.custom_profile_selector.count() == 1
+    assert "custom/custom-build.json" == editor.custom_profile_selector.currentText()
+
+    editor.default_profile_selector.setCurrentIndex(0)
+    assert editor._apply_selected_default_profile()
+    assert editor.profile.name in {"Default One", "Example Two"}

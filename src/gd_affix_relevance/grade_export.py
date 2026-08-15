@@ -6,6 +6,7 @@ import hashlib
 import json
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -23,6 +24,9 @@ BACKUP_SCHEMA_VERSION = 1
 BACKUP_MANIFEST = "backup-manifest.json"
 BACKUP_CONTENTS = "text_en"
 GRIM_DAWN_EXECUTABLE = "Grim Dawn.exe"
+PROFILE_SNAPSHOT_SCHEMA_VERSION = 1
+PROFILE_SNAPSHOT_ROOT = "profile-grade-snapshots"
+PROFILE_SNAPSHOT_METADATA = "snapshot.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +42,23 @@ class GradeRestoreResult:
     target_root: Path
     original_existed: bool
     restored_files: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileGradeSnapshot:
+    snapshot_id: str
+    profile_name: str
+    created_at: str
+    file_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class GradeSnapshotApplyResult:
+    target_root: Path
+    profile_name: str
+    snapshot_id: str
+    files_installed: int
+    backup_created: bool
 
 
 def validate_grim_dawn_folder(game_folder: Path) -> Path:
@@ -103,12 +124,133 @@ def export_grades_to_game(
         shutil.rmtree(temporary, ignore_errors=True)
 
     backup, backup_created = _ensure_original_backup(target, backups_root)
+    store_profile_grade_snapshot(backups_root, profile, stage)
     _install_directory(stage, target)
     return GradeExportResult(
         target_root=target,
         backup_root=backup,
         backup_created=backup_created,
         generation=replace(generation, output_root=stage),
+    )
+
+
+def store_profile_grade_snapshot(
+    backups_root: Path,
+    profile: BuildProfile,
+    source_text_root: Path,
+) -> ProfileGradeSnapshot:
+    """Persist one re-applicable export snapshot keyed by profile content."""
+
+    source = Path(source_text_root).expanduser().resolve()
+    if not source.is_dir():
+        raise ValueError(f"profile snapshot source is not a directory: {source}")
+
+    snapshot_id = _profile_snapshot_id(profile)
+    profile_name = profile.name.strip() or "Unnamed Profile"
+    created_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    file_count = sum(1 for path in source.rglob("*") if path.is_file())
+
+    root = _profile_snapshot_root(backups_root)
+    root.mkdir(parents=True, exist_ok=True)
+    target = root / snapshot_id
+
+    temporary = Path(tempfile.mkdtemp(prefix=".profile-snapshot-", dir=root))
+    try:
+        staged = temporary / "snapshot"
+        staged.mkdir(parents=True)
+        shutil.copytree(source, staged / BACKUP_CONTENTS)
+        (staged / PROFILE_SNAPSHOT_METADATA).write_text(
+            json.dumps(
+                {
+                    "schema_version": PROFILE_SNAPSHOT_SCHEMA_VERSION,
+                    "snapshot_id": snapshot_id,
+                    "profile_name": profile_name,
+                    "created_at": created_at,
+                    "file_count": file_count,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        _replace_directory(target, staged)
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+
+    return ProfileGradeSnapshot(
+        snapshot_id=snapshot_id,
+        profile_name=profile_name,
+        created_at=created_at,
+        file_count=file_count,
+    )
+
+
+def list_profile_grade_snapshots(
+    backups_root: Path,
+) -> tuple[ProfileGradeSnapshot, ...]:
+    """Return saved profile-grade snapshots sorted newest first."""
+
+    root = _profile_snapshot_root(backups_root)
+    if not root.is_dir():
+        return ()
+
+    snapshots: list[ProfileGradeSnapshot] = []
+    for entry in sorted(path for path in root.iterdir() if path.is_dir()):
+        metadata = entry / PROFILE_SNAPSHOT_METADATA
+        source = entry / BACKUP_CONTENTS
+        if not metadata.is_file() or not source.is_dir():
+            continue
+        try:
+            payload = json.loads(metadata.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if payload.get("schema_version") != PROFILE_SNAPSHOT_SCHEMA_VERSION:
+            continue
+        snapshot_id = str(payload.get("snapshot_id", "")).strip()
+        profile_name = str(payload.get("profile_name", "")).strip()
+        created_at = str(payload.get("created_at", "")).strip()
+        file_count = payload.get("file_count", 0)
+        if not snapshot_id or not profile_name:
+            continue
+        if isinstance(file_count, bool) or not isinstance(file_count, int):
+            file_count = 0
+        snapshots.append(
+            ProfileGradeSnapshot(
+                snapshot_id=snapshot_id,
+                profile_name=profile_name,
+                created_at=created_at,
+                file_count=file_count,
+            )
+        )
+
+    snapshots.sort(key=lambda snapshot: snapshot.created_at, reverse=True)
+    return tuple(snapshots)
+
+
+def apply_profile_grade_snapshot(
+    game_folder: Path,
+    backups_root: Path,
+    snapshot_id: str,
+) -> GradeSnapshotApplyResult:
+    """Install one saved profile-grade snapshot into settings/text_en."""
+
+    target = grim_dawn_text_root(game_folder)
+    normalized_id = snapshot_id.strip()
+    if not normalized_id:
+        raise ValueError("profile grade snapshot ID must not be blank")
+
+    snapshot_dir = _profile_snapshot_root(backups_root) / normalized_id
+    metadata, source = _load_profile_snapshot(snapshot_dir)
+    _, backup_created = _ensure_original_backup(target, backups_root)
+    _install_directory(source, target)
+
+    files_installed = sum(1 for path in source.rglob("*") if path.is_file())
+    return GradeSnapshotApplyResult(
+        target_root=target,
+        profile_name=metadata.profile_name,
+        snapshot_id=metadata.snapshot_id,
+        files_installed=files_installed,
+        backup_created=backup_created,
     )
 
 
@@ -234,3 +376,53 @@ def _remove_directory_recoverably(target: Path) -> None:
         raise ValueError(f"unfinished prior restore exists: {temporary}")
     target.replace(temporary)
     shutil.rmtree(temporary)
+
+
+def _profile_snapshot_root(backups_root: Path) -> Path:
+    return Path(backups_root).expanduser().resolve() / PROFILE_SNAPSHOT_ROOT
+
+
+def _profile_snapshot_id(profile: BuildProfile) -> str:
+    canonical = json.dumps(
+        profile.to_dict(),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+
+
+def _load_profile_snapshot(snapshot_dir: Path) -> tuple[ProfileGradeSnapshot, Path]:
+    if not snapshot_dir.is_dir():
+        raise ValueError(f"profile grade snapshot not found: {snapshot_dir}")
+
+    metadata_path = snapshot_dir / PROFILE_SNAPSHOT_METADATA
+    source = snapshot_dir / BACKUP_CONTENTS
+    if not metadata_path.is_file() or not source.is_dir():
+        raise ValueError(f"profile grade snapshot is incomplete: {snapshot_dir}")
+
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"could not read profile snapshot metadata: {error}") from error
+    if payload.get("schema_version") != PROFILE_SNAPSHOT_SCHEMA_VERSION:
+        raise ValueError("unsupported profile snapshot version")
+
+    snapshot_id = str(payload.get("snapshot_id", "")).strip()
+    profile_name = str(payload.get("profile_name", "")).strip()
+    created_at = str(payload.get("created_at", "")).strip()
+    file_count = payload.get("file_count", 0)
+    if not snapshot_id or not profile_name:
+        raise ValueError("profile snapshot metadata is missing required fields")
+    if isinstance(file_count, bool) or not isinstance(file_count, int):
+        file_count = 0
+
+    return (
+        ProfileGradeSnapshot(
+            snapshot_id=snapshot_id,
+            profile_name=profile_name,
+            created_at=created_at,
+            file_count=file_count,
+        ),
+        source,
+    )

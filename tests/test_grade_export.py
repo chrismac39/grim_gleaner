@@ -11,9 +11,11 @@ from gd_affix_relevance.catalog import (
 from gd_affix_relevance.domain import BuildProfile
 from gd_affix_relevance.grade_export import (
     BACKUP_CONTENTS,
+    apply_profile_grade_snapshot,
     backup_available,
     export_grades_to_game,
     grim_dawn_text_root,
+    list_profile_grade_snapshots,
     restore_game_backup,
 )
 
@@ -182,3 +184,54 @@ def test_export_applies_palette_file_override_to_marker_color(
         encoding="utf-8"
     )
     assert "tagHealthy={^H}[C1]: {^G}Bundled Healthy{^H} (c1)" in text
+
+
+def test_profile_grade_snapshots_can_be_listed_and_reapplied(
+    tmp_path: Path,
+) -> None:
+    game = tmp_path / "Grim Dawn"
+    target = game / "settings" / "text_en"
+    target.mkdir(parents=True)
+    (game / "Grim Dawn.exe").touch()
+    (target / "tags_items.txt").write_text(
+        "tagHealthy=Base Healthy\n",
+        encoding="utf-8",
+    )
+    bundled = _bundled_tags(tmp_path)
+    staging = tmp_path / "app" / "staging" / "text_en"
+    backups = tmp_path / "app" / "backups"
+
+    export_grades_to_game(
+        game,
+        bundled,
+        staging,
+        backups,
+        _catalog(),
+        BuildProfile("Profile A", {"health": 4}),
+    )
+    first_text = (target / "tags_items.txt").read_text(encoding="utf-8")
+    assert "[C1]" in first_text
+
+    export_grades_to_game(
+        game,
+        bundled,
+        staging,
+        backups,
+        _catalog(),
+        BuildProfile("Profile B", {}),
+    )
+    second_text = (target / "tags_items.txt").read_text(encoding="utf-8")
+    assert "[F0]" in second_text
+
+    snapshots = list_profile_grade_snapshots(backups)
+    assert len(snapshots) == 2
+    snapshot_a = next(
+        snapshot for snapshot in snapshots if snapshot.profile_name == "Profile A"
+    )
+
+    result = apply_profile_grade_snapshot(game, backups, snapshot_a.snapshot_id)
+
+    assert result.profile_name == "Profile A"
+    assert result.target_root == target
+    restored_text = (target / "tags_items.txt").read_text(encoding="utf-8")
+    assert "[C1]" in restored_text

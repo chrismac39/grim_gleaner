@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSignalBlocker, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -56,6 +57,11 @@ class ProfileEditor(QWidget):
             else Path.cwd()
         )
         self.profiles_root.mkdir(parents=True, exist_ok=True)
+        self.custom_profiles_root = self.profiles_root / "custom"
+        self.custom_profiles_root.mkdir(parents=True, exist_ok=True)
+        self._default_profile_paths = self._discover_default_profile_paths()
+        self._default_selector_paths: list[Path] = []
+        self._custom_selector_paths: list[Path] = []
         self.is_dirty = False
 
         layout = QVBoxLayout(self)
@@ -88,17 +94,40 @@ class ProfileEditor(QWidget):
         self.new_button.setToolTip("Start a blank build profile")
         self.new_button.clicked.connect(self.new_profile)
         name_row.addWidget(self.new_button)
-        self.load_button = QPushButton("Load...", self)
-        self.load_button.setObjectName("profileAction")
-        self.load_button.setToolTip("Load build profile from a JSON file")
-        self.load_button.clicked.connect(self._choose_profile_to_load)
-        name_row.addWidget(self.load_button)
-        self.save_button = QPushButton("Save...", self)
+        self.save_button = QPushButton("Save Profile", self)
         self.save_button.setObjectName("profileAction")
-        self.save_button.setToolTip("Save build profile to a JSON file")
-        self.save_button.clicked.connect(self._choose_profile_to_save)
+        self.save_button.setToolTip("Save this profile into your custom profile list")
+        self.save_button.clicked.connect(self._save_current_profile)
         name_row.addWidget(self.save_button)
         layout.addLayout(name_row)
+
+        selector_row = QHBoxLayout()
+        selector_row.setSpacing(8)
+        default_label = QLabel("Defaults", self)
+        default_label.setObjectName("fieldLabel")
+        selector_row.addWidget(default_label)
+        self.default_profile_selector = QComboBox(self)
+        self.default_profile_selector.setObjectName("profilePicker")
+        selector_row.addWidget(self.default_profile_selector, 1)
+        self.load_default_button = QPushButton("Apply Default", self)
+        self.load_default_button.setObjectName("profileAction")
+        self.load_default_button.clicked.connect(self._apply_selected_default_profile)
+        selector_row.addWidget(self.load_default_button)
+        layout.addLayout(selector_row)
+
+        custom_row = QHBoxLayout()
+        custom_row.setSpacing(8)
+        custom_label = QLabel("Custom", self)
+        custom_label.setObjectName("fieldLabel")
+        custom_row.addWidget(custom_label)
+        self.custom_profile_selector = QComboBox(self)
+        self.custom_profile_selector.setObjectName("profilePicker")
+        custom_row.addWidget(self.custom_profile_selector, 1)
+        self.load_custom_button = QPushButton("Apply Custom", self)
+        self.load_custom_button.setObjectName("profileAction")
+        self.load_custom_button.clicked.connect(self._apply_selected_custom_profile)
+        custom_row.addWidget(self.load_custom_button)
+        layout.addLayout(custom_row)
 
         initial_status = (
             f"Loaded: {self.current_profile_path.name}"
@@ -136,6 +165,7 @@ class ProfileEditor(QWidget):
         self.skills_editor.changed.connect(self._skills_changed)
         self.tabs.addTab(self.skills_editor, "Skills")
         layout.addWidget(self.tabs, 1)
+        self._refresh_profile_selectors()
 
     def _build_tab(self, definition: TabDefinition) -> QScrollArea:
         scroll = QScrollArea(self)
@@ -203,8 +233,21 @@ class ProfileEditor(QWidget):
         self.is_dirty = False
         self.file_status.setText(f"Saved: {destination.name}")
         self.file_status.setToolTip(str(destination))
+        self._refresh_profile_selectors(selected_path=destination)
         self.profile_path_changed.emit(destination)
         return destination
+
+    def _save_current_profile(self) -> bool:
+        target = self.current_profile_path
+        if target is None or target in self._default_profile_paths:
+            slug = self._profile_slug(self.profile.name)
+            target = self.custom_profiles_root / f"{slug}.json"
+        try:
+            self.save_to_path(target)
+        except (OSError, ValueError, TypeError) as error:
+            QMessageBox.critical(self, "Could Not Save Profile", str(error))
+            return False
+        return True
 
     def _stamp_profile_snapshot_from_settings(self) -> None:
         if self.settings is None:
@@ -251,6 +294,7 @@ class ProfileEditor(QWidget):
         self.is_dirty = False
         self.file_status.setText(f"Loaded: {self.current_profile_path.name}")
         self.file_status.setToolTip(str(self.current_profile_path))
+        self._refresh_profile_selectors(selected_path=self.current_profile_path)
         self.profile_path_changed.emit(self.current_profile_path)
         self.profile_changed.emit()
         return self.profile
@@ -283,6 +327,7 @@ class ProfileEditor(QWidget):
         self.is_dirty = False
         self.file_status.setText("New profile — not saved")
         self.file_status.setToolTip("")
+        self._refresh_profile_selectors()
         self.profile_path_changed.emit(None)
         self.profile_changed.emit()
         return True
@@ -322,7 +367,7 @@ class ProfileEditor(QWidget):
 
     def _save_before_reset(self) -> bool:
         if self.current_profile_path is None:
-            return self._choose_profile_to_save()
+            return self._save_current_profile()
         try:
             self.save_to_path(self.current_profile_path)
         except (OSError, ValueError, TypeError) as error:
@@ -367,6 +412,115 @@ class ProfileEditor(QWidget):
             QMessageBox.critical(self, "Could Not Load Profile", str(error))
             return False
         return True
+
+    def _apply_selected_default_profile(self) -> bool:
+        if not self._default_selector_paths:
+            return False
+        index = self.default_profile_selector.currentIndex()
+        if index < 0 or index >= len(self._default_selector_paths):
+            return False
+        return self._load_profile_with_unsaved_prompt(
+            self._default_selector_paths[index]
+        )
+
+    def _apply_selected_custom_profile(self) -> bool:
+        if not self._custom_selector_paths:
+            return False
+        index = self.custom_profile_selector.currentIndex()
+        if index < 0 or index >= len(self._custom_selector_paths):
+            return False
+        return self._load_profile_with_unsaved_prompt(
+            self._custom_selector_paths[index]
+        )
+
+    def _load_profile_with_unsaved_prompt(self, path: Path) -> bool:
+        if self.is_dirty:
+            action = self._prompt_unsaved_action()
+            if action == QMessageBox.StandardButton.Cancel:
+                return False
+            if action == QMessageBox.StandardButton.Save and not self._save_before_reset():
+                return False
+        try:
+            self.load_from_path(path)
+        except (OSError, ValueError, TypeError) as error:
+            QMessageBox.critical(self, "Could Not Load Profile", str(error))
+            return False
+        return True
+
+    def _discover_default_profile_paths(self) -> tuple[Path, ...]:
+        candidates: set[Path] = set()
+        candidates.update(path for path in self.profiles_root.glob("*.json") if path.is_file())
+        examples = self.profiles_root / "examples"
+        if examples.is_dir():
+            candidates.update(
+                path for path in examples.glob("*.json") if path.is_file()
+            )
+        return tuple(sorted(candidates, key=lambda path: path.name.casefold()))
+
+    def _list_custom_profile_paths(self) -> tuple[Path, ...]:
+        paths = tuple(
+            sorted(
+                (
+                    path
+                    for path in self.profiles_root.rglob("*.json")
+                    if path.is_file() and path not in self._default_profile_paths
+                ),
+                key=lambda path: path.name.casefold(),
+            )
+        )
+        return paths
+
+    def _refresh_profile_selectors(self, *, selected_path: Path | None = None) -> None:
+        self._default_selector_paths = list(self._default_profile_paths)
+        self._custom_selector_paths = list(self._list_custom_profile_paths())
+
+        self.default_profile_selector.blockSignals(True)
+        self.default_profile_selector.clear()
+        for path in self._default_selector_paths:
+            label = self._selector_label(path)
+            self.default_profile_selector.addItem(label)
+        self.default_profile_selector.blockSignals(False)
+        self.load_default_button.setEnabled(bool(self._default_selector_paths))
+
+        self.custom_profile_selector.blockSignals(True)
+        self.custom_profile_selector.clear()
+        if self._custom_selector_paths:
+            for path in self._custom_selector_paths:
+                label = self._selector_label(path)
+                self.custom_profile_selector.addItem(label)
+        else:
+            self.custom_profile_selector.addItem("No custom profiles saved yet")
+        self.custom_profile_selector.blockSignals(False)
+        self.custom_profile_selector.setEnabled(bool(self._custom_selector_paths))
+        self.load_custom_button.setEnabled(bool(self._custom_selector_paths))
+
+        if selected_path is None:
+            selected_path = self.current_profile_path
+        if selected_path is None:
+            return
+        selected = Path(selected_path).expanduser().resolve()
+        if selected in self._default_selector_paths:
+            self.default_profile_selector.setCurrentIndex(
+                self._default_selector_paths.index(selected)
+            )
+        if selected in self._custom_selector_paths:
+            self.custom_profile_selector.setCurrentIndex(
+                self._custom_selector_paths.index(selected)
+            )
+
+    def _selector_label(self, path: Path) -> str:
+        try:
+            relative = path.relative_to(self.profiles_root)
+            return relative.as_posix()
+        except ValueError:
+            return path.name
+
+    def _profile_slug(self, value: str) -> str:
+        cleaned = "".join(
+            character if character.isalnum() or character in {"-", "_"} else "-"
+            for character in value.strip().lower()
+        ).strip("-")
+        return cleaned or "build-profile"
 
     def _mark_unsaved(self) -> None:
         self.is_dirty = True

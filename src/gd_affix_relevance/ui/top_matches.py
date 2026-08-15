@@ -670,11 +670,6 @@ class TopMatchesPage(QWidget):
         heading_row.addWidget(self.refresh_button)
         layout.addLayout(heading_row)
 
-        self.status = QLabel(self)
-        self.status.setObjectName("pageHint")
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-
         badge_row = QWidget(self)
         badge_row.setObjectName("versionBadgeRow")
         badge_layout = QHBoxLayout(badge_row)
@@ -699,6 +694,11 @@ class TopMatchesPage(QWidget):
         self.version_blurb.setObjectName("versionBadgeDetail")
         self.version_blurb.setWordWrap(True)
         layout.addWidget(self.version_blurb)
+
+        self.status = QLabel(self)
+        self.status.setObjectName("pageHint")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
 
         highlight_legend = QLabel(
             "Pale turquoise: +ranks to active skills    "
@@ -768,10 +768,10 @@ class TopMatchesPage(QWidget):
         )
         state = evaluate_profile_snapshot_match(current, profile_snapshot)
         if state == "match":
-            summary = "Profile snapshot matches current install."
+            summary = ""
             status_text = "✓ In Sync"
         elif state == "mismatch":
-            summary = "Profile snapshot differs from current install."
+            summary = ""
             status_text = "✕ Out of Sync"
         else:
             summary = (
