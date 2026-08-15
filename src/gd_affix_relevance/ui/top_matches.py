@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QSettings, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QIcon, QPixmap
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -48,7 +48,7 @@ from gd_affix_relevance.game_version import (
     snapshot_from_profile_fields,
 )
 from gd_affix_relevance.output import marker_palette_from_values
-from gd_affix_relevance.palette_config import load_palette
+from gd_affix_relevance.palette_config import default_palette, load_palette
 from gd_affix_relevance.scoring import (
     ADDON_AUGMENT,
     ADDON_COMPONENT,
@@ -74,7 +74,11 @@ from gd_affix_relevance.slots import (
 )
 from gd_affix_relevance.ui.catalog import RESISTANCE_STATS
 from gd_affix_relevance.stats import registered_stat_definitions
-from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING, PALETTE_FILE_SETTING
+from gd_affix_relevance.ui.settings import (
+    GAME_FOLDER_SETTING,
+    PALETTE_FILE_SETTING,
+    sanitize_path,
+)
 from gd_affix_relevance.ui.widgets import StatRow
 
 STAT_LABELS = {
@@ -167,6 +171,23 @@ def _format_score(value: float) -> str:
 def _swatch_icon(hex_color: str) -> QIcon:
     pixmap = QPixmap(10, 10)
     pixmap.fill(QColor(hex_color))
+    return QIcon(pixmap)
+
+
+def _swatch_strip_icon(colors: tuple[str, ...]) -> QIcon:
+    if not colors:
+        return _swatch_icon("#d7dde8")
+    width = 12
+    height = 10
+    pixmap = QPixmap(width, height)
+    pixmap.fill(QColor("#00000000"))
+    painter = QPainter(pixmap)
+    stripe_count = len(colors)
+    for index, color in enumerate(colors):
+        start = (index * width) // stripe_count
+        end = ((index + 1) * width) // stripe_count
+        painter.fillRect(start, 0, max(1, end - start), height, QColor(color))
+    painter.end()
     return QIcon(pixmap)
 
 
@@ -1419,11 +1440,13 @@ class TopMatchesPage(QWidget):
         self.loaded_profile_badge.setToolTip(str(self.current_profile_path))
 
     def _refresh_style_examples_from_palette(self) -> None:
-        marker_hex, default_hex, grade_hex = self._active_palette_hex()
+        marker_hex, affix_hex, item_hex, grade_hex, rarity_hex = self._active_palette_hex()
         style = self.profile.grade_display_style.strip().casefold()
         self.style_example.setText(
             "Style EG: "
-            f"{self._style_example_html(style, marker_hex, default_hex)}"
+            f"{self._style_example_html(style, marker_hex, affix_hex, item_hex)}"
+            "<br/>"
+            f"{self._style_rarity_legend_html(rarity_hex)}"
             "<br/>"
             f"{self._style_palette_legend_html(grade_hex)}"
         )
@@ -1431,15 +1454,18 @@ class TopMatchesPage(QWidget):
             style_id = self.grade_style_selector.itemData(index)
             if not isinstance(style_id, str):
                 continue
-            color = self._selector_item_color(style_id, marker_hex, default_hex)
+            color = self._selector_item_color()
             self.grade_style_selector.setItemData(
                 index,
                 QBrush(QColor(color)),
                 Qt.ItemDataRole.ForegroundRole,
             )
-            self.grade_style_selector.setItemIcon(index, _swatch_icon(color))
+            self.grade_style_selector.setItemIcon(
+                index,
+                self._selector_item_icon(style_id, marker_hex, affix_hex, item_hex),
+            )
 
-        selected_color = self._selector_item_color(style, marker_hex, default_hex)
+        selected_color = self._selector_item_color()
         self.grade_style_selector.setStyleSheet(
             "QComboBox#profileSwapSelector {"
             "background: #242932;"
@@ -1456,70 +1482,74 @@ class TopMatchesPage(QWidget):
             "}"
         )
 
-    def _active_palette_hex(self) -> tuple[str, str, dict[str, str]]:
-        marker_hex = PALETTE_CODE_HEX.get("y", "#fff62c")
-        default_hex = PALETTE_CODE_HEX.get("e", "#8f6b24")
-        grade_hex = {
-            "F0": PALETTE_CODE_HEX.get("r", "#ff4200"),
-            "D1": PALETTE_CODE_HEX.get("o", "#f3a44d"),
-            "C1": PALETTE_CODE_HEX.get("y", "#fff62c"),
-            "B2": PALETTE_CODE_HEX.get("g", "#10eb5d"),
-            "A4": PALETTE_CODE_HEX.get("t", "#00ffd2"),
-            "S6": PALETTE_CODE_HEX.get("c", "#00ffff"),
-            "S+7": PALETTE_CODE_HEX.get("b", "#4e7bd6"),
-            "S++8": PALETTE_CODE_HEX.get("p", "#bd94c6"),
-        }
-        if self.settings is None:
-            return marker_hex, default_hex, grade_hex
-        raw_path = self.settings.value(PALETTE_FILE_SETTING, "", type=str).strip()
-        palette_values = None
-        if raw_path:
-            try:
-                palette_values = load_palette(Path(raw_path)).values
-            except (OSError, ValueError):
-                palette_values = None
-        palette = marker_palette_from_values(palette_values)
+    def _active_palette_hex(self) -> tuple[str, str, str, dict[str, str], dict[str, str]]:
+        values = default_palette()
+        raw_path = ""
+        if self.settings is not None:
+            raw_path = sanitize_path(
+                self.settings.value(PALETTE_FILE_SETTING, "", type=str)
+            ).strip()
+        try:
+            loaded = load_palette(Path(raw_path)) if raw_path else load_palette()
+            values = loaded.values
+        except (OSError, ValueError):
+            values = default_palette()
+
+        palette = marker_palette_from_values(values)
         marker_code = palette.grade_color_codes.get("S", palette.generated_color_code)
-        marker_hex = PALETTE_CODE_HEX.get(marker_code.casefold(), marker_hex)
-        default_hex = PALETTE_CODE_HEX.get(
-            palette.default_color_code.casefold(),
-            default_hex,
-        )
+        marker_hex = self._code_to_hex(marker_code, "#00ffff")
+
+        rarity_hex = {
+            "common": self._code_to_hex(values.get("rarity.common", "w"), "#ffffff"),
+            "magical": self._code_to_hex(values.get("rarity.magical", "y"), "#fff62c"),
+            "rare": self._code_to_hex(values.get("rarity.rare", "g"), "#10eb5d"),
+            "epic": self._code_to_hex(values.get("rarity.epic", "b"), "#4e7bd6"),
+            "legendary": self._code_to_hex(values.get("rarity.legendary", "p"), "#bd94c6"),
+        }
+
+        affix_hex = rarity_hex["rare"]
+        item_hex = rarity_hex["epic"]
         grade_hex = {
-            "F0": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("F", palette.generated_color_code).casefold(),
-                grade_hex["F0"],
+            "F0": self._code_to_hex(
+                palette.grade_color_codes.get("F", palette.generated_color_code),
+                "#ff4200",
             ),
-            "D1": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("D", palette.generated_color_code).casefold(),
-                grade_hex["D1"],
+            "D1": self._code_to_hex(
+                palette.grade_color_codes.get("D", palette.generated_color_code),
+                "#f3a44d",
             ),
-            "C1": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("C", palette.generated_color_code).casefold(),
-                grade_hex["C1"],
+            "C1": self._code_to_hex(
+                palette.grade_color_codes.get("C", palette.generated_color_code),
+                "#fff62c",
             ),
-            "B2": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("B", palette.generated_color_code).casefold(),
-                grade_hex["B2"],
+            "B2": self._code_to_hex(
+                palette.grade_color_codes.get("B", palette.generated_color_code),
+                "#10eb5d",
             ),
-            "A4": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("A", palette.generated_color_code).casefold(),
-                grade_hex["A4"],
+            "A4": self._code_to_hex(
+                palette.grade_color_codes.get("A", palette.generated_color_code),
+                "#00ffd2",
             ),
-            "S6": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("S", palette.generated_color_code).casefold(),
-                grade_hex["S6"],
+            "S6": self._code_to_hex(
+                palette.grade_color_codes.get("S", palette.generated_color_code),
+                "#00ffff",
             ),
-            "S+7": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("S+", palette.generated_color_code).casefold(),
-                grade_hex["S+7"],
+            "S+7": self._code_to_hex(
+                palette.grade_color_codes.get("S+", palette.generated_color_code),
+                "#4e7bd6",
             ),
-            "S++8": PALETTE_CODE_HEX.get(
-                palette.grade_color_codes.get("S++", palette.generated_color_code).casefold(),
-                grade_hex["S++8"],
+            "S++8": self._code_to_hex(
+                palette.grade_color_codes.get("S++", palette.generated_color_code),
+                "#bd94c6",
             ),
         }
-        return marker_hex, default_hex, grade_hex
+        return marker_hex, affix_hex, item_hex, grade_hex, rarity_hex
+
+    def _code_to_hex(self, code: str, fallback_hex: str) -> str:
+        normalized = str(code).strip().casefold()
+        if not normalized:
+            return fallback_hex
+        return PALETTE_CODE_HEX.get(normalized, fallback_hex)
 
     def _style_palette_legend_html(self, grade_hex: dict[str, str]) -> str:
         order = ("F0", "D1", "C1", "B2", "A4", "S6", "S+7", "S++8")
@@ -1529,42 +1559,62 @@ class TopMatchesPage(QWidget):
         ]
         return "Palette grade colors: " + " ".join(parts)
 
-    def _selector_item_color(
+    def _selector_item_color(self) -> str:
+        return "#d7dde8"
+
+    def _selector_item_icon(
         self,
         style: str,
         marker_hex: str,
-        default_hex: str,
-    ) -> str:
+        affix_hex: str,
+        item_hex: str,
+    ) -> QIcon:
         normalized = style.strip().casefold()
         if normalized == GRADE_DISPLAY_STYLE_ITEM_ONLY:
-            return default_hex
-        return marker_hex
+            return _swatch_strip_icon((marker_hex, item_hex))
+        if normalized == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
+            return _swatch_strip_icon((affix_hex, marker_hex))
+        return _swatch_strip_icon((marker_hex, affix_hex, item_hex))
+
+    def _style_rarity_legend_html(self, rarity_hex: dict[str, str]) -> str:
+        return (
+            "Rarity colors: "
+            f"<span style='color: {rarity_hex['common']}; font-weight: 700;'>common</span> "
+            f"<span style='color: {rarity_hex['magical']}; font-weight: 700;'>magical</span> "
+            f"<span style='color: {rarity_hex['rare']}; font-weight: 700;'>rare</span> "
+            f"<span style='color: {rarity_hex['epic']}; font-weight: 700;'>epic</span> "
+            f"<span style='color: {rarity_hex['legendary']}; font-weight: 700;'>legendary</span>"
+        )
 
     def _style_example_html(
         self,
         style: str,
         marker_hex: str,
-        default_hex: str,
+        affix_hex: str,
+        item_hex: str,
     ) -> str:
         marker_style = f"color: {marker_hex}; font-weight: 700;"
-        default_style = f"color: {default_hex};"
+        affix_style = f"color: {affix_hex};"
+        item_style = f"color: {item_hex};"
         if style == GRADE_DISPLAY_STYLE_ITEM_ONLY:
             return (
                 f"<span style='{marker_style}'>[S6]: </span>"
-                f"<span style='{default_style}'>Stonehide Stoneplate Greaves of Kings</span>"
+                f"<span style='{item_style}'>Stonehide Stoneplate Greaves of Kings</span>"
             )
         if style == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
             return (
-                f"<span style='{default_style}'>Stonehide </span>"
+                f"<span style='{affix_style}'>Stonehide </span>"
                 f"<span style='{marker_style}'>(s3)</span>"
-                f"<span style='{default_style}'> Stoneplate Greaves of Kings </span>"
+                f"<span style='{item_style}'> Stoneplate Greaves </span>"
+                f"<span style='{affix_style}'>of Kings </span>"
                 f"<span style='{marker_style}'>(s3)</span>"
             )
         return (
             f"<span style='{marker_style}'>[S6]: </span>"
-            f"<span style='{default_style}'>Stonehide </span>"
+            f"<span style='{affix_style}'>Stonehide </span>"
             f"<span style='{marker_style}'>(s3)</span>"
-            f"<span style='{default_style}'> Stoneplate Greaves of Kings </span>"
+            f"<span style='{item_style}'> Stoneplate Greaves </span>"
+            f"<span style='{affix_style}'>of Kings </span>"
             f"<span style='{marker_style}'>(s3)</span>"
         )
 

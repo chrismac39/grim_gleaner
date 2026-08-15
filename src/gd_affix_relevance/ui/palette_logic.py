@@ -261,7 +261,7 @@ class PaletteLogicPage(QWidget):
 
         introduction = QLabel(
             "Choose color letters for each category below. Export Grades uses this "
-            "active palette to write the exact grade & rarity colors you see in-game.",
+            "active palette to write the exact rarity, grade & damage type colors you see in-game.",
             self,
         )
         introduction.setObjectName("pageHint")
