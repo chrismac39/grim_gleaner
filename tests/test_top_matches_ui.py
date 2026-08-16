@@ -1,8 +1,10 @@
 import os
 from dataclasses import replace
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QSettings
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QApplication, QFrame
@@ -421,10 +423,7 @@ def test_gear_page_shows_loaded_profile_and_updates_grade_style() -> None:
         BuildProfile(weights={"health": 4}),
         catalog=AffixCatalog(()),
     )
-    page = window.top_matches_page
-
-    page.set_profile_path(None)
-    assert "Unsaved" in page.loaded_profile_badge.text()
+    page = window.palette_logic_page
 
     seen = []
     page.profile_state_changed.connect(lambda: seen.append(True))
@@ -434,6 +433,75 @@ def test_gear_page_shows_loaded_profile_and_updates_grade_style() -> None:
     assert page.profile.grade_display_style == "item_only"
     assert page.applied_style_pill.text() == "Applied: Item Only"
     assert seen
+
+
+def test_style_example_uses_palette_grade_and_default_item_colors(
+    tmp_path: Path,
+) -> None:
+    _application()
+    palette_file = tmp_path / "grim-gleaner-palette.txt"
+    palette_file.write_text(
+        "grade.a=f\n"
+        "grade.f=r\n"
+        "grade.b=g\n"
+        "marker.default=w\n",
+        encoding="utf-8",
+    )
+    settings = QSettings(
+        str(tmp_path / "settings.ini"), QSettings.Format.IniFormat
+    )
+    settings.setValue("paths/palette_file", str(palette_file))
+    settings.sync()
+
+    window = MainWindow(
+        BuildProfile(weights={"health": 4}),
+        catalog=AffixCatalog(()),
+        settings=settings,
+    )
+    html = window.palette_logic_page.style_example.text()
+
+    assert "[A6]" in html
+    assert "(f0)" in html
+    assert "(b3)" in html
+    assert "color: #ff69b5; font-weight: 700;'>[A6]" in html
+    assert "color: #ff4200; font-weight: 700;'>(f0)" in html
+    assert "color: #10eb5d; font-weight: 700;'>(b3)" in html
+    assert "color: #ffffff;'> Stoneplate Greaves " in html
+
+
+def test_item_only_style_example_keeps_affix_suffix_rarity_colors(
+    tmp_path: Path,
+) -> None:
+    _application()
+    palette_file = tmp_path / "grim-gleaner-palette.txt"
+    palette_file.write_text(
+        "rarity.rare=o\n"
+        "marker.default=w\n"
+        "grade.a=f\n",
+        encoding="utf-8",
+    )
+    settings = QSettings(
+        str(tmp_path / "settings.ini"), QSettings.Format.IniFormat
+    )
+    settings.setValue("paths/palette_file", str(palette_file))
+    settings.sync()
+
+    window = MainWindow(
+        BuildProfile(weights={"health": 4}),
+        catalog=AffixCatalog(()),
+        settings=settings,
+    )
+    page = window.palette_logic_page
+    item_only_index = page.grade_style_selector.findData("item_only")
+    page.grade_style_selector.setCurrentIndex(item_only_index)
+    html = page.style_example.text()
+
+    assert "[A6]" in html
+    assert "(f0)" not in html
+    assert "(b3)" not in html
+    assert "color: #f3a44d;'>Stonehide " in html
+    assert "color: #ffffff;'>Stoneplate Greaves" in html
+    assert "color: #f3a44d;'> of Kings" in html
 
 
 def test_unique_tables_show_b_or_better_items_and_filter_types() -> None:

@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QBrush, QColor, QIcon, QPixmap
+from PySide6.QtCore import QSettings, QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -23,11 +23,17 @@ from PySide6.QtWidgets import (
 
 from gd_affix_relevance.palette_config import default_palette, load_palette
 from gd_affix_relevance.domain import BuildProfile
+from gd_affix_relevance.domain.profile import (
+    GRADE_DISPLAY_STYLE_AFFIX_ONLY,
+    GRADE_DISPLAY_STYLE_FULL,
+    GRADE_DISPLAY_STYLE_ITEM_ONLY,
+)
 from gd_affix_relevance.game_version import (
     detect_game_snapshot,
     evaluate_profile_snapshot_match,
     snapshot_from_profile_fields,
 )
+from gd_affix_relevance.output import marker_palette_from_values
 from gd_affix_relevance.ui.settings import PALETTE_FILE_SETTING
 from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING
 
@@ -193,10 +199,42 @@ _FIELD_HELP: dict[str, str] = {
     ),
 }
 
+GRADE_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
+    (
+        GRADE_DISPLAY_STYLE_FULL,
+        "Full (EG: [A6]: Stonehide (f0) Stoneplate Greaves of Kings (b3))",
+    ),
+    (
+        GRADE_DISPLAY_STYLE_ITEM_ONLY,
+        "Item Only (EG: [A6]: Stonehide Stoneplate Greaves of Kings)",
+    ),
+    (
+        GRADE_DISPLAY_STYLE_AFFIX_ONLY,
+        "Affix/Suffix Only (EG: Stonehide (f0) Stoneplate Greaves of Kings (b3))",
+    ),
+)
+
 
 def _swatch_icon(hex_color: str) -> QIcon:
     pixmap = QPixmap(10, 10)
     pixmap.fill(QColor(hex_color))
+    return QIcon(pixmap)
+
+
+def _swatch_strip_icon(colors: tuple[str, ...]) -> QIcon:
+    if not colors:
+        return _swatch_icon("#d7dde8")
+    width = 12
+    height = 10
+    pixmap = QPixmap(width, height)
+    pixmap.fill(QColor("#00000000"))
+    painter = QPainter(pixmap)
+    stripe_count = len(colors)
+    for index, color in enumerate(colors):
+        start = (index * width) // stripe_count
+        end = ((index + 1) * width) // stripe_count
+        painter.fillRect(start, 0, max(1, end - start), height, QColor(color))
+    painter.end()
     return QIcon(pixmap)
 
 
@@ -213,6 +251,8 @@ class _ClickSelectComboBox(QComboBox):
 
 
 class PaletteLogicPage(QWidget):
+    profile_state_changed = Signal()
+
     def __init__(
         self,
         parent: QWidget | None = None,
@@ -268,6 +308,31 @@ class PaletteLogicPage(QWidget):
         introduction.setWordWrap(True)
         layout.addWidget(introduction)
 
+        style_row = QHBoxLayout()
+        style_row.setSpacing(8)
+        style_label = QLabel("Gear Grade style", self)
+        style_label.setObjectName("fieldLabel")
+        style_label.setFixedWidth(self._label_width)
+        style_row.addWidget(style_label)
+        self.grade_style_selector = QComboBox(self)
+        self.grade_style_selector.setObjectName("profileSwapSelector")
+        for style_id, display in GRADE_STYLE_OPTIONS:
+            self.grade_style_selector.addItem(display, style_id)
+        self.grade_style_selector.currentIndexChanged.connect(
+            self._grade_style_changed
+        )
+        style_row.addWidget(self.grade_style_selector, 1)
+        self.applied_style_pill = QLabel(self)
+        self.applied_style_pill.setObjectName("profileStatusPill")
+        style_row.addWidget(self.applied_style_pill)
+        layout.addLayout(style_row)
+
+        self.style_example = QLabel(self)
+        self.style_example.setObjectName("matchHighlightLegend")
+        self.style_example.setTextFormat(Qt.TextFormat.RichText)
+        self.style_example.setWordWrap(True)
+        layout.addWidget(self.style_example)
+
         self.palette_path = QLabel(self)
         self.palette_path.setObjectName("pageHint")
         self.palette_path.setWordWrap(True)
@@ -309,11 +374,19 @@ class PaletteLogicPage(QWidget):
         layout.addWidget(scroll, 1)
 
         self._reload_palette()
+        self._sync_grade_style_controls()
+        self._refresh_style_examples_from_palette()
         self.refresh_version_blurb()
 
     def set_profile(self, profile: BuildProfile) -> None:
         self.profile = profile
+        self._sync_grade_style_controls()
+        self._refresh_style_examples_from_palette()
         self.refresh_version_blurb()
+
+    def refresh_profile_state(self) -> None:
+        self._sync_grade_style_controls()
+        self._refresh_style_examples_from_palette()
 
     def refresh_version_blurb(self) -> None:
         raw_game_folder = ""
@@ -462,6 +535,7 @@ class PaletteLogicPage(QWidget):
             "Active palette file (used by Export Grades for in-game colors): "
             f"{target}"
         )
+        self._refresh_style_examples_from_palette()
 
     def _reset_to_defaults(self) -> None:
         defaults = default_palette()
@@ -473,6 +547,7 @@ class PaletteLogicPage(QWidget):
                 )
             else:
                 self._set_selector_value(key, None)
+        self._refresh_style_examples_from_palette()
 
     def _save_palette(self) -> None:
         target = self._palette_path()
@@ -496,6 +571,231 @@ class PaletteLogicPage(QWidget):
         self.palette_path.setText(
             "Active palette file (used by Export Grades for in-game colors): "
             f"{target}"
+        )
+        self._refresh_style_examples_from_palette()
+
+    def _grade_style_changed(self, index: int) -> None:
+        if index < 0 or self.profile is None:
+            return
+        value = self.grade_style_selector.itemData(index)
+        if not isinstance(value, str):
+            return
+        normalized = value.strip().casefold()
+        if self.profile.grade_display_style == normalized:
+            self._sync_grade_style_controls()
+            return
+        self.profile.grade_display_style = normalized
+        self._sync_grade_style_controls()
+        self._refresh_style_examples_from_palette()
+        self.profile_state_changed.emit()
+
+    def _sync_grade_style_controls(self) -> None:
+        if self.profile is None:
+            return
+        normalized = self.profile.grade_display_style.strip().casefold()
+        for index in range(self.grade_style_selector.count()):
+            value = self.grade_style_selector.itemData(index)
+            if isinstance(value, str) and value.strip().casefold() == normalized:
+                blocker = QSignalBlocker(self.grade_style_selector)
+                self.grade_style_selector.setCurrentIndex(index)
+                del blocker
+                break
+        label = "Full"
+        if normalized == GRADE_DISPLAY_STYLE_ITEM_ONLY:
+            label = "Item Only"
+        elif normalized == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
+            label = "Affix/Suffix Only"
+        self.applied_style_pill.setText(f"Applied: {label}")
+
+    def _preview_palette_values(self) -> dict[str, str]:
+        values = default_palette()
+        for key, selector in self._selectors.items():
+            code = selector.currentData()
+            if isinstance(code, str) and code != _NO_OVERRIDE:
+                values[key] = code
+        return values
+
+    def _refresh_style_examples_from_palette(self) -> None:
+        if self.profile is None:
+            return
+        marker_hex, affix_hex, item_hex, grade_hex, rarity_hex = self._active_palette_hex()
+        style = self.profile.grade_display_style.strip().casefold()
+        self.style_example.setText(
+            "Style EG: "
+            f"{self._style_example_html(style, affix_hex, item_hex, grade_hex)}"
+            "<br/>"
+            f"{self._style_rarity_legend_html(rarity_hex)}"
+            "<br/>"
+            f"{self._style_palette_legend_html(grade_hex)}"
+        )
+        for index in range(self.grade_style_selector.count()):
+            style_id = self.grade_style_selector.itemData(index)
+            if not isinstance(style_id, str):
+                continue
+            color = self._selector_item_color()
+            self.grade_style_selector.setItemData(
+                index,
+                QBrush(QColor(color)),
+                Qt.ItemDataRole.ForegroundRole,
+            )
+            self.grade_style_selector.setItemIcon(
+                index,
+                self._selector_item_icon(style_id, grade_hex, affix_hex, item_hex),
+            )
+
+        selected_color = self._selector_item_color()
+        self.grade_style_selector.setStyleSheet(
+            "QComboBox#profileSwapSelector {"
+            "background: #242932;"
+            "border: 1px solid #3a414d;"
+            "border-radius: 5px;"
+            "padding: 4px 9px;"
+            "min-width: 260px;"
+            f"color: {selected_color};"
+            "}"
+            "QComboBox#profileSwapSelector QAbstractItemView {"
+            "background: #20242b;"
+            "border: 1px solid #3a414d;"
+            "selection-background-color: #3a4454;"
+            "}"
+        )
+
+    def _active_palette_hex(self) -> tuple[str, str, str, dict[str, str], dict[str, str]]:
+        values = self._preview_palette_values()
+        palette = marker_palette_from_values(values)
+        marker_code = palette.grade_color_codes.get("S", palette.generated_color_code)
+        marker_hex = self._code_to_hex(marker_code, "#00ffff")
+
+        rarity_hex = {
+            "common": self._code_to_hex(values.get("rarity.common", "w"), "#ffffff"),
+            "magical": self._code_to_hex(values.get("rarity.magical", "y"), "#fff62c"),
+            "rare": self._code_to_hex(values.get("rarity.rare", "g"), "#10eb5d"),
+            "epic": self._code_to_hex(values.get("rarity.epic", "b"), "#4e7bd6"),
+            "legendary": self._code_to_hex(values.get("rarity.legendary", "p"), "#bd94c6"),
+        }
+
+        affix_hex = rarity_hex["rare"]
+        item_hex = self._code_to_hex(values.get("marker.default", "e"), "#8f6b24")
+        grade_hex = {
+            "F0": self._code_to_hex(
+                palette.grade_color_codes.get("F", palette.generated_color_code),
+                "#ff4200",
+            ),
+            "D1": self._code_to_hex(
+                palette.grade_color_codes.get("D", palette.generated_color_code),
+                "#f3a44d",
+            ),
+            "C1": self._code_to_hex(
+                palette.grade_color_codes.get("C", palette.generated_color_code),
+                "#fff62c",
+            ),
+            "B3": self._code_to_hex(
+                palette.grade_color_codes.get("B", palette.generated_color_code),
+                "#10eb5d",
+            ),
+            "A6": self._code_to_hex(
+                palette.grade_color_codes.get("A", palette.generated_color_code),
+                "#00ffd2",
+            ),
+            "S6": self._code_to_hex(
+                palette.grade_color_codes.get("S", palette.generated_color_code),
+                "#00ffff",
+            ),
+            "S+7": self._code_to_hex(
+                palette.grade_color_codes.get("S+", palette.generated_color_code),
+                "#4e7bd6",
+            ),
+            "S++8": self._code_to_hex(
+                palette.grade_color_codes.get("S++", palette.generated_color_code),
+                "#bd94c6",
+            ),
+        }
+        return marker_hex, affix_hex, item_hex, grade_hex, rarity_hex
+
+    def _code_to_hex(self, code: str, fallback_hex: str) -> str:
+        normalized = str(code).strip().casefold()
+        if not normalized:
+            return fallback_hex
+        return _COLOR_HEX.get(normalized, fallback_hex)
+
+    def _style_palette_legend_html(self, grade_hex: dict[str, str]) -> str:
+        order = ("F0", "D1", "C1", "B3", "A6", "S6", "S+7", "S++8")
+        parts = [
+            f"<span style='color: {grade_hex[token]}; font-weight: 700;'>{token}</span>"
+            for token in order
+        ]
+        return "Palette grade colors: " + " ".join(parts)
+
+    def _selector_item_color(self) -> str:
+        return "#d7dde8"
+
+    def _selector_item_icon(
+        self,
+        style: str,
+        grade_hex: dict[str, str],
+        affix_hex: str,
+        item_hex: str,
+    ) -> QIcon:
+        lead_hex = grade_hex.get("A6", "#00ffd2")
+        low_hex = grade_hex.get("F0", "#ff4200")
+        suffix_hex = grade_hex.get("B3", "#10eb5d")
+        normalized = style.strip().casefold()
+        if normalized == GRADE_DISPLAY_STYLE_ITEM_ONLY:
+            return _swatch_strip_icon((lead_hex, affix_hex, item_hex, affix_hex))
+        if normalized == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
+            return _swatch_strip_icon((affix_hex, low_hex, suffix_hex))
+        return _swatch_strip_icon((lead_hex, affix_hex, item_hex, suffix_hex))
+
+    def _style_rarity_legend_html(self, rarity_hex: dict[str, str]) -> str:
+        return (
+            "Rarity colors: "
+            f"<span style='color: {rarity_hex['common']}; font-weight: 700;'>common</span> "
+            f"<span style='color: {rarity_hex['magical']}; font-weight: 700;'>magical</span> "
+            f"<span style='color: {rarity_hex['rare']}; font-weight: 700;'>rare</span> "
+            f"<span style='color: {rarity_hex['epic']}; font-weight: 700;'>epic</span> "
+            f"<span style='color: {rarity_hex['legendary']}; font-weight: 700;'>legendary</span>"
+        )
+
+    def _style_example_html(
+        self,
+        style: str,
+        affix_hex: str,
+        item_hex: str,
+        grade_hex: dict[str, str],
+    ) -> str:
+        leading_style = (
+            f"color: {grade_hex.get('A6', '#00ffd2')}; font-weight: 700;"
+        )
+        prefix_grade_style = (
+            f"color: {grade_hex.get('F0', '#ff4200')}; font-weight: 700;"
+        )
+        suffix_grade_style = (
+            f"color: {grade_hex.get('B3', '#10eb5d')}; font-weight: 700;"
+        )
+        affix_style = f"color: {affix_hex};"
+        item_style = f"color: {item_hex};"
+        if style == GRADE_DISPLAY_STYLE_ITEM_ONLY:
+            return (
+                f"<span style='{leading_style}'>[A6]: </span>"
+                f"<span style='{affix_style}'>Stonehide </span>"
+                f"<span style='{item_style}'>Stoneplate Greaves</span>"
+                f"<span style='{affix_style}'> of Kings</span>"
+            )
+        if style == GRADE_DISPLAY_STYLE_AFFIX_ONLY:
+            return (
+                f"<span style='{affix_style}'>Stonehide </span>"
+                f"<span style='{prefix_grade_style}'>(f0)</span>"
+                f"<span style='{item_style}'> Stoneplate Greaves </span>"
+                f"<span style='{affix_style}'>of Kings </span>"
+                f"<span style='{suffix_grade_style}'>(b3)</span>"
+            )
+        return (
+            f"<span style='{leading_style}'>[A6]: </span>"
+            f"<span style='{affix_style}'>Stonehide </span>"
+            f"<span style='{prefix_grade_style}'>(f0)</span>"
+            f"<span style='{item_style}'> Stoneplate Greaves </span>"
+            f"<span style='{affix_style}'>of Kings </span>"
+            f"<span style='{suffix_grade_style}'>(b3)</span>"
         )
 
     def _add_selector_section(

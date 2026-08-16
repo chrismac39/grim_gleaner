@@ -241,7 +241,13 @@ class MainWindow(QMainWindow):
         )
 
         self.profile_editor.profile_changed.connect(self.top_matches_page.refresh)
+        self.profile_editor.profile_changed.connect(
+            self.palette_logic_page.refresh_profile_state
+        )
         self.top_matches_page.profile_state_changed.connect(
+            self.profile_editor.mark_external_change
+        )
+        self.palette_logic_page.profile_state_changed.connect(
             self.profile_editor.mark_external_change
         )
         self.profile_editor.profile_path_changed.connect(
