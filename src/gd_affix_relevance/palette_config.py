@@ -89,6 +89,7 @@ KNOWN_KEYS = frozenset(
 class PaletteLoadResult:
     values: dict[str, str]
     source: Path | None
+    overrides: dict[str, str]
 
 
 class PaletteParseError(ValueError):
@@ -103,13 +104,18 @@ def load_palette(path: Path | None = None) -> PaletteLoadResult:
     if path is None:
         default_path = Path("grim-gleaner-palette.txt")
         if not default_path.is_file():
-            return PaletteLoadResult(values=default_palette(), source=None)
+            return PaletteLoadResult(
+                values=default_palette(), source=None, overrides={}
+            )
         path = default_path
 
     resolved = Path(path).expanduser().resolve()
+    overrides = _parse_palette_text(
+        resolved.read_text(encoding="utf-8"), resolved
+    )
     values = default_palette()
-    values.update(_parse_palette_text(resolved.read_text(encoding="utf-8"), resolved))
-    return PaletteLoadResult(values=values, source=resolved)
+    values.update(overrides)
+    return PaletteLoadResult(values=values, source=resolved, overrides=overrides)
 
 
 def _parse_palette_text(text: str, source: Path) -> dict[str, str]:

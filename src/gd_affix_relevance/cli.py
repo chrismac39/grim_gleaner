@@ -191,7 +191,7 @@ def _run_generate_output(args: argparse.Namespace) -> int:
         items=bundle.items,
         fallback_source_root=args.fallback_source_root,
         marker_palette=marker_palette_from_values(
-            palette.values if palette is not None else None
+            palette.overrides if palette is not None else None
         ),
     )
     _print_json_summary(

@@ -21,6 +21,10 @@ def test_load_palette_applies_overrides(tmp_path: Path) -> None:
     loaded = load_palette(palette_file)
 
     assert loaded.source == palette_file.resolve()
+    assert loaded.overrides == {
+        "damage.pierce": "r",
+        "marker.generated": "h",
+    }
     assert loaded.values["damage.pierce"] == "r"
     assert loaded.values["marker.generated"] == "h"
     assert loaded.values["rarity.common"] == default_palette()["rarity.common"]

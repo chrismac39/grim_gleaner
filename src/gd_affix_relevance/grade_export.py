@@ -112,7 +112,9 @@ def export_grades_to_game(
         raise ValueError("staging and Grim Dawn text_en paths must not overlap")
 
     stage.parent.mkdir(parents=True, exist_ok=True)
-    palette_values = load_palette(palette_file).values if palette_file is not None else None
+    palette_values = (
+        load_palette(palette_file).overrides if palette_file is not None else None
+    )
     temporary = Path(tempfile.mkdtemp(prefix=".grade-export-", dir=stage.parent))
     try:
         generated = temporary / "text_en"
@@ -164,7 +166,9 @@ def build_profile_grade_snapshot(
     selection = resolve_export_sources(game_folder, bundled_tags_root)
     stage = Path(staging_root).expanduser().resolve()
     stage.parent.mkdir(parents=True, exist_ok=True)
-    palette_values = load_palette(palette_file).values if palette_file is not None else None
+    palette_values = (
+        load_palette(palette_file).overrides if palette_file is not None else None
+    )
     temporary = Path(tempfile.mkdtemp(prefix=".grade-snapshot-", dir=stage.parent))
     try:
         generated = temporary / "text_en"
