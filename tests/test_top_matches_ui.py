@@ -529,6 +529,9 @@ def test_palette_preview_updates_without_swatches_and_tracks_unsaved_changes(
         "#4e7bd6"
     )
     assert "[Gleaner default]" in selector.itemText(green_index)
+    assert selector.width() == 280
+    assert "color: #10eb5d;" in selector.styleSheet()
+    assert selector.itemDelegate().__class__.__name__ == "_PaletteItemDelegate"
     assert all(
         page.grade_style_selector.itemIcon(index).isNull()
         for index in range(page.grade_style_selector.count())

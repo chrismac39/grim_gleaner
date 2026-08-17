@@ -6,7 +6,15 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QIcon,
+    QPainter,
+    QPalette,
+    QPixmap,
+)
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -17,6 +25,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
@@ -39,6 +49,8 @@ from gd_affix_relevance.ui.settings import GAME_FOLDER_SETTING
 
 _DEFAULT_FILE_NAME = "grim-gleaner-palette.txt"
 _NO_OVERRIDE = "__none__"
+_PALETTE_LABEL_EXTRA_WIDTH = 22
+_PALETTE_SELECTOR_WIDTH = 280
 
 _COLOR_NAMES: dict[str, str] = {
     "a": "Aqua",
@@ -248,6 +260,24 @@ class _ClickSelectComboBox(QComboBox):
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
         event.ignore()
+
+
+class _PaletteItemDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index) -> None:  # noqa: N802
+        styled_option = QStyleOptionViewItem(option)
+        foreground = index.data(Qt.ItemDataRole.ForegroundRole)
+        if isinstance(foreground, QBrush):
+            for group in (
+                QPalette.ColorGroup.Active,
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorGroup.Disabled,
+            ):
+                styled_option.palette.setBrush(
+                    group,
+                    QPalette.ColorRole.Text,
+                    foreground,
+                )
+        super().paint(painter, styled_option, index)
 
 
 class PaletteLogicPage(QWidget):
@@ -683,7 +713,6 @@ class PaletteLogicPage(QWidget):
             "border: 1px solid #3a414d;"
             "border-radius: 5px;"
             "padding: 4px 9px;"
-            "min-width: 260px;"
             f"color: {selected_color};"
             "}"
             "QComboBox#profileSwapSelector QAbstractItemView {"
@@ -867,6 +896,7 @@ class PaletteLogicPage(QWidget):
         defaults = default_palette()
         for key in keys:
             label_host = QWidget(section_frame)
+            label_host.setFixedWidth(self._label_width + _PALETTE_LABEL_EXTRA_WIDTH)
             label_layout = QHBoxLayout(label_host)
             label_layout.setContentsMargins(0, 0, 0, 0)
             label_layout.setSpacing(6)
@@ -882,6 +912,8 @@ class PaletteLogicPage(QWidget):
 
             selector = _ClickSelectComboBox(section_frame)
             selector.setObjectName("paletteSelector")
+            selector.setFixedWidth(_PALETTE_SELECTOR_WIDTH)
+            selector.setItemDelegate(_PaletteItemDelegate(selector))
             fallback = "engine/default" if key not in defaults else "built-in default"
             selector.addItem(f"No override ({fallback})", _NO_OVERRIDE)
             for code, display in _letter_options():
@@ -938,7 +970,6 @@ class PaletteLogicPage(QWidget):
             "border: 1px solid #3a414d;"
             "border-radius: 5px;"
             "padding: 6px 10px;"
-            "min-width: 102px;"
             "}"
             "QComboBox#paletteSelector QAbstractItemView {"
             "background: #20242b;"

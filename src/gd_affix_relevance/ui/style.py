@@ -199,7 +199,6 @@ QLineEdit#profileInput {
     border: 1px solid #3a414d;
     border-radius: 5px;
     padding: 4px 9px;
-    min-width: 260px;
 }
 QLineEdit#profileInput:focus { border-color: #d4a843; }
 QPushButton#profileAction {
@@ -356,7 +355,6 @@ QComboBox#paletteSelector {
     border: 1px solid #3a414d;
     border-radius: 5px;
     padding: 6px 10px;
-    min-width: 102px;
 }
 QComboBox#paletteSelector QAbstractItemView {
     background: #20242b;
