@@ -23,7 +23,7 @@ AI (Codex) was used for data analysis data and coding to build this program.
 
 1. Download the latest .zip file from the [releases section](https://github.com/kultcher/grim_gleaner/releases)
 2. Unzip the files to their own folder
-3. Run grim_gleaner.exe to launch the utility. (If you get the "Windows protected your machine" notification, click "More Info -> Run Anyway)
+3. Run grim_gleaner.exe to launch the utility. Current development releases may be unsigned, so Windows SmartScreen or an application-control policy may show a warning. See [Windows release trust](docs/windows-release-trust.md) for the signing and distribution plan.
 4. Open the "Settings" section from the sidebar and set your Grim Dawn game location (you'll be prompted automatically the first time you open the program.)\
 (Steam default location: C:\Program Files (x86)\Steam\steamapps\common\Grim Dawn)
 

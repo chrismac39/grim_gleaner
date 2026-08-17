@@ -12,6 +12,8 @@ __pycache__/
 build/
 dist/
 docs/
+!docs/
+!docs/**
 
 artifacts/*
 !artifacts/profiles/
