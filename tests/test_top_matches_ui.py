@@ -550,6 +550,25 @@ def test_palette_preview_updates_without_swatches_and_tracks_unsaved_changes(
     assert "Palette colors are saved" in page.palette_status.text()
 
 
+def test_palette_sections_reflow_between_two_and_one_columns() -> None:
+    _application()
+    window = MainWindow(
+        BuildProfile(weights={"health": 4}),
+        catalog=AffixCatalog(()),
+    )
+    page = window.palette_logic_page
+    section_frame, grid, items = page._palette_section_grids[0]
+
+    section_frame.resize(700, section_frame.height())
+    page._reflow_palette_sections()
+    assert grid.itemAtPosition(0, 1).widget() is items[1]
+
+    section_frame.resize(580, section_frame.height())
+    page._reflow_palette_sections()
+    assert grid.itemAtPosition(1, 0).widget() is items[1]
+    assert grid.itemAtPosition(0, 1) is None
+
+
 def test_unique_tables_show_b_or_better_items_and_filter_types() -> None:
     app = _application()
     items = ItemCatalog(

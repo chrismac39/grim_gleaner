@@ -19,7 +19,7 @@ from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
-    QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -51,6 +51,7 @@ _DEFAULT_FILE_NAME = "grim-gleaner-palette.txt"
 _NO_OVERRIDE = "__none__"
 _PALETTE_LABEL_EXTRA_WIDTH = 22
 _PALETTE_SELECTOR_WIDTH = 280
+_PALETTE_GRID_GAP = 16
 
 _COLOR_NAMES: dict[str, str] = {
     "a": "Aqua",
@@ -294,6 +295,7 @@ class PaletteLogicPage(QWidget):
         self.settings = settings
         self.profile = profile
         self._selectors: dict[str, QComboBox] = {}
+        self._palette_section_grids: list[tuple[QFrame, QGridLayout, list[QWidget]]] = []
         self._label_width = self._compute_label_width()
 
         layout = QVBoxLayout(self)
@@ -412,6 +414,24 @@ class PaletteLogicPage(QWidget):
         self._sync_grade_style_controls()
         self._refresh_style_examples_from_palette()
         self.refresh_version_blurb()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._reflow_palette_sections()
+
+    def _reflow_palette_sections(self) -> None:
+        for section_frame, grid, items in self._palette_section_grids:
+            available_width = section_frame.width() - 20
+            column_count = 2 if available_width >= (
+                (_PALETTE_SELECTOR_WIDTH * 2) + _PALETTE_GRID_GAP
+            ) else 1
+            while grid.count():
+                grid.takeAt(0)
+            for index, item in enumerate(items):
+                row, column = divmod(index, column_count)
+                grid.addWidget(item, row, column)
+            for column in range(2):
+                grid.setColumnStretch(column, 1 if column < column_count else 0)
 
     def set_profile(self, profile: BuildProfile) -> None:
         self.profile = profile
@@ -888,14 +908,20 @@ class PaletteLogicPage(QWidget):
 
         section_frame = QFrame(parent)
         section_frame.setObjectName("paletteSection")
-        form = QFormLayout(section_frame)
-        form.setContentsMargins(10, 8, 10, 8)
-        form.setHorizontalSpacing(16)
-        form.setVerticalSpacing(10)
+        grid = QGridLayout(section_frame)
+        grid.setContentsMargins(10, 8, 10, 8)
+        grid.setHorizontalSpacing(_PALETTE_GRID_GAP)
+        grid.setVerticalSpacing(10)
 
         defaults = default_palette()
+        items: list[QWidget] = []
         for key in keys:
-            label_host = QWidget(section_frame)
+            item = QWidget(section_frame)
+            item_layout = QVBoxLayout(item)
+            item_layout.setContentsMargins(0, 0, 0, 0)
+            item_layout.setSpacing(4)
+
+            label_host = QWidget(item)
             label_host.setFixedWidth(self._label_width + _PALETTE_LABEL_EXTRA_WIDTH)
             label_layout = QHBoxLayout(label_host)
             label_layout.setContentsMargins(0, 0, 0, 0)
@@ -910,7 +936,7 @@ class PaletteLogicPage(QWidget):
                 label_layout.addWidget(self._build_info_icon(field_help, label_host))
             label_layout.addStretch()
 
-            selector = _ClickSelectComboBox(section_frame)
+            selector = _ClickSelectComboBox(item)
             selector.setObjectName("paletteSelector")
             selector.setFixedWidth(_PALETTE_SELECTOR_WIDTH)
             selector.setItemDelegate(_PaletteItemDelegate(selector))
@@ -938,9 +964,13 @@ class PaletteLogicPage(QWidget):
                 lambda _index, combo=selector: self._palette_selector_changed(combo)
             )
 
-            form.addRow(label_host, selector)
+            item_layout.addWidget(label_host)
+            item_layout.addWidget(selector, 0, Qt.AlignmentFlag.AlignLeft)
+            items.append(item)
             self._selectors[key] = selector
 
+        self._palette_section_grids.append((section_frame, grid, items))
+        self._reflow_palette_sections()
         layout.addWidget(section_frame)
 
     def _build_info_icon(self, tooltip: str, parent: QWidget) -> QLabel:
