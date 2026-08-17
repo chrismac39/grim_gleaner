@@ -36,7 +36,8 @@ QWidget#versionBadgeRow {
     background: transparent;
 }
 QLabel#versionBadge {
-    background: #232934;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #2d3441, stop: 1 #202630);
     border: 1px solid #3a4656;
     border-radius: 11px;
     color: #d5deea;
@@ -44,12 +45,14 @@ QLabel#versionBadge {
     padding: 5px 10px;
 }
 QLabel#versionBadge[kind="profile"] {
-    background: #2b2837;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #383249, stop: 1 #292535);
     border-color: #534873;
     color: #dcd6f0;
 }
 QLabel#versionBadge[kind="current"] {
-    background: #1f2f35;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #294047, stop: 1 #1b2a30);
     border-color: #3f606b;
     color: #cbeaf5;
 }
@@ -59,17 +62,20 @@ QLabel#versionStatusBadge {
     padding: 5px 10px;
 }
 QLabel#versionStatusBadge[syncState="match"] {
-    background: #1f3b2b;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #285239, stop: 1 #1a3124);
     border: 1px solid #4f966b;
     color: #bbf0ce;
 }
 QLabel#versionStatusBadge[syncState="mismatch"] {
-    background: #442a2d;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #5a3339, stop: 1 #382226);
     border: 1px solid #b55a64;
     color: #ffc0c7;
 }
 QLabel#versionStatusBadge[syncState="unknown"] {
-    background: #353126;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #463d2d, stop: 1 #2d291f);
     border: 1px solid #847447;
     color: #e8d9ae;
 }
@@ -204,12 +210,30 @@ QPushButton#profileAction {
 }
 QPushButton#profileAction:hover { background: #39404c; }
 QLabel#profileStatusPill {
-    background: #2b2837;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #383249, stop: 1 #292535);
     border: 1px solid #534873;
     border-radius: 11px;
     color: #dcd6f0;
     font-weight: 600;
     padding: 5px 10px;
+}
+QLabel#paletteStatus {
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 7px 10px;
+}
+QLabel#paletteStatus[dirty="true"] {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #5a4930, stop: 1 #382e20);
+    border: 1px solid #b28a43;
+    color: #f6d895;
+}
+QLabel#paletteStatus[dirty="false"] {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #285239, stop: 1 #1a3124);
+    border: 1px solid #4f966b;
+    color: #bbf0ce;
 }
 QTableWidget#topMatchesTable, QTableWidget#affixSlotTable,
 QTableWidget#uniqueSlotTable, QTableWidget#addonSlotTable {
@@ -327,7 +351,8 @@ QFrame#paletteSection {
     border-radius: 7px;
 }
 QComboBox#paletteSelector {
-    background: #242932;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #2c333f, stop: 1 #20252d);
     border: 1px solid #3a414d;
     border-radius: 5px;
     padding: 6px 10px;

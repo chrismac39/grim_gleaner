@@ -338,6 +338,11 @@ class PaletteLogicPage(QWidget):
         self.palette_path.setWordWrap(True)
         layout.addWidget(self.palette_path)
 
+        self.palette_status = QLabel(self)
+        self.palette_status.setObjectName("paletteStatus")
+        self.palette_status.setWordWrap(True)
+        layout.addWidget(self.palette_status)
+
         actions = QHBoxLayout()
         actions.setSpacing(8)
         self.save_button = QPushButton("Save Palette", self)
@@ -536,6 +541,7 @@ class PaletteLogicPage(QWidget):
             f"{target}"
         )
         self._refresh_style_examples_from_palette()
+        self._refresh_palette_status()
 
     def _reset_to_defaults(self) -> None:
         defaults = default_palette()
@@ -548,6 +554,7 @@ class PaletteLogicPage(QWidget):
             else:
                 self._set_selector_value(key, None)
         self._refresh_style_examples_from_palette()
+        self._refresh_palette_status()
 
     def _save_palette(self) -> None:
         target = self._palette_path()
@@ -573,6 +580,35 @@ class PaletteLogicPage(QWidget):
             f"{target}"
         )
         self._refresh_style_examples_from_palette()
+        self._refresh_palette_status()
+
+    def _saved_effective_values(self) -> dict[str, str]:
+        target = self._palette_path()
+        if not target.is_file():
+            return {}
+        try:
+            loaded = load_palette(target).values
+        except (OSError, ValueError):
+            return {}
+
+        defaults = default_palette()
+        saved: dict[str, str] = {}
+        for key, value in loaded.items():
+            default_choice = defaults.get(key) or _ENGINE_DEFAULT_CODES.get(key)
+            if default_choice is None or value != default_choice:
+                saved[key] = value
+        return saved
+
+    def _refresh_palette_status(self) -> None:
+        is_dirty = self._effective_values_from_ui() != self._saved_effective_values()
+        self.palette_status.setProperty("dirty", is_dirty)
+        self.palette_status.setText(
+            "Unsaved palette changes: save this palette before exporting grades."
+            if is_dirty
+            else "Palette colors are saved and ready for export."
+        )
+        self.palette_status.style().unpolish(self.palette_status)
+        self.palette_status.style().polish(self.palette_status)
 
     def _grade_style_changed(self, index: int) -> None:
         if index < 0 or self.profile is None:
@@ -632,21 +668,18 @@ class PaletteLogicPage(QWidget):
             style_id = self.grade_style_selector.itemData(index)
             if not isinstance(style_id, str):
                 continue
-            color = self._selector_item_color()
             self.grade_style_selector.setItemData(
                 index,
-                QBrush(QColor(color)),
+                QBrush(QColor(self._selector_item_color())),
                 Qt.ItemDataRole.ForegroundRole,
             )
-            self.grade_style_selector.setItemIcon(
-                index,
-                self._selector_item_icon(style_id, grade_hex, affix_hex, item_hex),
-            )
+            self.grade_style_selector.setItemIcon(index, QIcon())
 
         selected_color = self._selector_item_color()
         self.grade_style_selector.setStyleSheet(
             "QComboBox#profileSwapSelector {"
-            "background: #242932;"
+            "background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,"
+            "stop: 0 #2c333f, stop: 1 #20252d);"
             "border: 1px solid #3a414d;"
             "border-radius: 5px;"
             "padding: 4px 9px;"
@@ -756,6 +789,11 @@ class PaletteLogicPage(QWidget):
             f"<span style='color: {rarity_hex['legendary']}; font-weight: 700;'>legendary</span>"
         )
 
+    def _palette_selector_changed(self, selector: QComboBox) -> None:
+        self._apply_selector_tint(selector)
+        self._refresh_style_examples_from_palette()
+        self._refresh_palette_status()
+
     def _style_example_html(
         self,
         style: str,
@@ -847,21 +885,9 @@ class PaletteLogicPage(QWidget):
             fallback = "engine/default" if key not in defaults else "built-in default"
             selector.addItem(f"No override ({fallback})", _NO_OVERRIDE)
             for code, display in _letter_options():
-                swatch = _COLOR_HEX.get(code)
-                if swatch:
-                    selector.addItem(_swatch_icon(swatch), display, code)
-                else:
-                    selector.addItem(display, code)
-                row_index = selector.count() - 1
-                if swatch:
-                    swatch_color = QColor(swatch)
-                    selector.setItemData(
-                        row_index,
-                        QBrush(swatch_color),
-                        Qt.ItemDataRole.ForegroundRole,
-                    )
+                selector.addItem(display, code)
             selector.currentIndexChanged.connect(
-                lambda _index, combo=selector: self._apply_selector_tint(combo)
+                lambda _index, combo=selector: self._palette_selector_changed(combo)
             )
 
             form.addRow(label_host, selector)
@@ -890,7 +916,8 @@ class PaletteLogicPage(QWidget):
 
         selector.setStyleSheet(
             "QComboBox#paletteSelector {"
-            "background: #242932;"
+            "background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,"
+            "stop: 0 #2c333f, stop: 1 #20252d);"
             f"color: {hex_color};"
             "border: 1px solid #3a414d;"
             "border-radius: 5px;"

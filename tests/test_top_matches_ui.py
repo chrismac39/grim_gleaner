@@ -504,6 +504,43 @@ def test_item_only_style_example_keeps_affix_suffix_rarity_colors(
     assert "color: #f3a44d;'> of Kings" in html
 
 
+def test_palette_preview_updates_without_swatches_and_tracks_unsaved_changes(
+    tmp_path: Path,
+) -> None:
+    _application()
+    settings = QSettings(
+        str(tmp_path / "settings.ini"), QSettings.Format.IniFormat
+    )
+    settings.setValue("paths/palette_file", str(tmp_path / "palette.txt"))
+    settings.sync()
+
+    window = MainWindow(
+        BuildProfile(weights={"health": 4}),
+        catalog=AffixCatalog(()),
+        settings=settings,
+    )
+    page = window.palette_logic_page
+    selector = page._selectors["rarity.rare"]
+
+    assert all(selector.itemIcon(index).isNull() for index in range(selector.count()))
+    assert all(
+        page.grade_style_selector.itemIcon(index).isNull()
+        for index in range(page.grade_style_selector.count())
+    )
+    assert page.palette_status.property("dirty") is False
+
+    selector.setCurrentIndex(selector.findData("o"))
+
+    assert "color: #f3a44d; font-weight: 700;'>rare" in page.style_example.text()
+    assert page.palette_status.property("dirty") is True
+    assert "Unsaved palette changes" in page.palette_status.text()
+
+    page.save_button.click()
+
+    assert page.palette_status.property("dirty") is False
+    assert "Palette colors are saved" in page.palette_status.text()
+
+
 def test_unique_tables_show_b_or_better_items_and_filter_types() -> None:
     app = _application()
     items = ItemCatalog(
