@@ -19,15 +19,18 @@ from gd_affix_relevance.output import (
     generate_rainbow_output,
     marker_palette_from_values,
 )
-from gd_affix_relevance.palette_config import load_palette
+from gd_affix_relevance.palette_config import (
+    load_palette,
+    palette_fingerprint,
+)
 from gd_affix_relevance.runtime_paths import resolve_export_sources
 
 BACKUP_SCHEMA_VERSION = 1
 BACKUP_MANIFEST = "backup-manifest.json"
 BACKUP_CONTENTS = "text_en"
 GRIM_DAWN_EXECUTABLE = "Grim Dawn.exe"
-PROFILE_SNAPSHOT_SCHEMA_VERSION = 2
-SUPPORTED_PROFILE_SNAPSHOT_SCHEMA_VERSIONS = frozenset({1, 2})
+PROFILE_SNAPSHOT_SCHEMA_VERSION = 3
+SUPPORTED_PROFILE_SNAPSHOT_SCHEMA_VERSIONS = frozenset({1, 2, 3})
 PROFILE_SNAPSHOT_ROOT = "profile-grade-snapshots"
 PROFILE_SNAPSHOT_METADATA = "snapshot.json"
 
@@ -55,6 +58,7 @@ class ProfileGradeSnapshot:
     file_count: int
     patch_versions: str = "unknown"
     source_kind: str = "custom"
+    palette_fingerprint: str = ""
     profile_payload: dict[str, Any] | None = None
 
 
@@ -112,9 +116,9 @@ def export_grades_to_game(
         raise ValueError("staging and Grim Dawn text_en paths must not overlap")
 
     stage.parent.mkdir(parents=True, exist_ok=True)
-    palette_values = (
-        load_palette(palette_file).overrides if palette_file is not None else None
-    )
+    loaded_palette = load_palette(palette_file)
+    palette_values = loaded_palette.overrides if palette_file is not None else None
+    current_palette_fingerprint = palette_fingerprint(loaded_palette.values)
     temporary = Path(tempfile.mkdtemp(prefix=".grade-export-", dir=stage.parent))
     try:
         generated = temporary / "text_en"
@@ -139,6 +143,7 @@ def export_grades_to_game(
         stage,
         patch_versions=current_snapshot.patch_versions,
         source_kind="custom",
+        palette_fingerprint=current_palette_fingerprint,
     )
     _install_directory(stage, target)
     return GradeExportResult(
@@ -166,9 +171,9 @@ def build_profile_grade_snapshot(
     selection = resolve_export_sources(game_folder, bundled_tags_root)
     stage = Path(staging_root).expanduser().resolve()
     stage.parent.mkdir(parents=True, exist_ok=True)
-    palette_values = (
-        load_palette(palette_file).overrides if palette_file is not None else None
-    )
+    loaded_palette = load_palette(palette_file)
+    palette_values = loaded_palette.overrides if palette_file is not None else None
+    current_palette_fingerprint = palette_fingerprint(loaded_palette.values)
     temporary = Path(tempfile.mkdtemp(prefix=".grade-snapshot-", dir=stage.parent))
     try:
         generated = temporary / "text_en"
@@ -188,6 +193,7 @@ def build_profile_grade_snapshot(
             generated,
             patch_versions=current_snapshot.patch_versions,
             source_kind=source_kind,
+            palette_fingerprint=current_palette_fingerprint,
         )
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
@@ -200,6 +206,7 @@ def store_profile_grade_snapshot(
     *,
     patch_versions: str = "unknown",
     source_kind: str = "custom",
+    palette_fingerprint: str = "",
 ) -> ProfileGradeSnapshot:
     """Persist one re-applicable export snapshot keyed by profile content."""
 
@@ -231,6 +238,7 @@ def store_profile_grade_snapshot(
                     "file_count": file_count,
                     "patch_versions": patch_versions,
                     "source_kind": source_kind,
+                    "palette_fingerprint": palette_fingerprint,
                     "profile_payload": profile.to_dict(),
                 },
                 indent=2,
@@ -249,6 +257,7 @@ def store_profile_grade_snapshot(
         file_count=file_count,
         patch_versions=patch_versions,
         source_kind=source_kind,
+        palette_fingerprint=palette_fingerprint,
         profile_payload=profile.to_dict(),
     )
 
@@ -280,6 +289,9 @@ def list_profile_grade_snapshots(
         file_count = payload.get("file_count", 0)
         patch_versions = str(payload.get("patch_versions", "unknown")).strip() or "unknown"
         source_kind = str(payload.get("source_kind", "custom")).strip() or "custom"
+        snapshot_palette_fingerprint = str(
+            payload.get("palette_fingerprint", "")
+        ).strip()
         profile_payload = payload.get("profile_payload")
         if not isinstance(profile_payload, dict):
             profile_payload = None
@@ -295,6 +307,7 @@ def list_profile_grade_snapshots(
                 file_count=file_count,
                 patch_versions=patch_versions,
                 source_kind=source_kind,
+                palette_fingerprint=snapshot_palette_fingerprint,
                 profile_payload=profile_payload,
             )
         )

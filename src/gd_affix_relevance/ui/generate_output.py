@@ -33,6 +33,7 @@ from gd_affix_relevance.grade_export import (
     restore_game_backup,
 )
 from gd_affix_relevance.output import build_affix_markers, build_unique_item_markers
+from gd_affix_relevance.palette_config import default_palette, load_palette, palette_fingerprint
 from gd_affix_relevance.profile_store import load_profile
 from gd_affix_relevance.ui.settings import (
     GAME_FOLDER_SETTING,
@@ -303,6 +304,11 @@ class GenerateOutputPage(QWidget):
         self._update_loaded_profile_pill()
         self._refresh_snapshot_selector()
 
+    def refresh_default_exports_for_palette(self) -> None:
+        """Refresh cached built-in exports without installing anything."""
+
+        self._refresh_snapshot_selector(force_default_palette_refresh=True)
+
     def _selector_label(self, path: Path) -> str:
         try:
             return path.relative_to(self.profiles_root).as_posix()
@@ -454,9 +460,16 @@ class GenerateOutputPage(QWidget):
             )
             self.settings.sync()
 
-    def _refresh_snapshot_selector(self) -> None:
+    def _refresh_snapshot_selector(
+        self,
+        *,
+        force_default_palette_refresh: bool = False,
+    ) -> None:
         snapshots = list_profile_grade_snapshots(self.backups_root)
-        snapshots = self._ensure_default_saved_exports(snapshots)
+        snapshots = self._ensure_default_saved_exports(
+            snapshots,
+            force_default_palette_refresh=force_default_palette_refresh,
+        )
         self.snapshot_selector.blockSignals(True)
         self.snapshot_selector.clear()
         self._saved_export_entries = []
@@ -528,6 +541,8 @@ class GenerateOutputPage(QWidget):
     def _ensure_default_saved_exports(
         self,
         snapshots: tuple[ProfileGradeSnapshot, ...],
+        *,
+        force_default_palette_refresh: bool = False,
     ) -> tuple[ProfileGradeSnapshot, ...]:
         if self.catalog is None:
             return snapshots
@@ -541,6 +556,7 @@ class GenerateOutputPage(QWidget):
             (snapshot.source_kind, snapshot.profile_name): snapshot
             for snapshot in snapshots
         }
+        current_palette_fingerprint = self._configured_palette_fingerprint()
         changed = False
         for default_path in self._default_profile_paths:
             try:
@@ -555,6 +571,11 @@ class GenerateOutputPage(QWidget):
                     existing.patch_versions.casefold() != "unknown"
                     and current_patch.casefold() != "unknown"
                     and existing.patch_versions != current_patch
+                )
+                or (
+                    force_default_palette_refresh
+                    and existing is not None
+                    and existing.palette_fingerprint != current_palette_fingerprint
                 )
             )
             if not stale:
@@ -579,6 +600,16 @@ class GenerateOutputPage(QWidget):
         if not changed:
             return snapshots
         return list_profile_grade_snapshots(self.backups_root)
+
+    def _configured_palette_fingerprint(self) -> str:
+        palette_file = self._configured_palette_file()
+        if palette_file is None:
+            return palette_fingerprint(default_palette())
+        try:
+            values = load_palette(palette_file).values
+        except (OSError, ValueError):
+            values = default_palette()
+        return palette_fingerprint(values)
 
     def _update_loaded_profile_pill(self) -> None:
         if self.current_profile_path is None:

@@ -521,6 +521,8 @@ def test_palette_preview_updates_without_swatches_and_tracks_unsaved_changes(
     )
     page = window.palette_logic_page
     selector = page._selectors["rarity.rare"]
+    saved_events: list[bool] = []
+    page.palette_saved.connect(lambda: saved_events.append(True))
 
     assert all(selector.itemIcon(index).isNull() for index in range(selector.count()))
     blue_index = selector.findData("b")
@@ -546,6 +548,7 @@ def test_palette_preview_updates_without_swatches_and_tracks_unsaved_changes(
 
     page.save_button.click()
 
+    assert saved_events == [True]
     assert page.palette_status.property("dirty") is False
     assert "Palette colors are saved" in page.palette_status.text()
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -98,6 +101,11 @@ class PaletteParseError(ValueError):
 
 def default_palette() -> dict[str, str]:
     return dict(DEFAULT_PALETTE)
+
+
+def palette_fingerprint(values: Mapping[str, str]) -> str:
+    payload = json.dumps(dict(sorted(values.items())), separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def load_palette(path: Path | None = None) -> PaletteLoadResult:

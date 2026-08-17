@@ -283,6 +283,7 @@ class _PaletteItemDelegate(QStyledItemDelegate):
 
 class PaletteLogicPage(QWidget):
     profile_state_changed = Signal()
+    palette_saved = Signal()
 
     def __init__(
         self,
@@ -631,6 +632,7 @@ class PaletteLogicPage(QWidget):
         )
         self._refresh_style_examples_from_palette()
         self._refresh_palette_status()
+        self.palette_saved.emit()
 
     def _saved_effective_values(self) -> dict[str, str]:
         target = self._palette_path()

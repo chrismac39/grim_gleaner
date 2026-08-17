@@ -211,6 +211,9 @@ class MainWindow(QMainWindow):
             "Apply grades to Grim Dawn or restore the original item names",
             self.export_grades_page_index,
         )
+        self.palette_logic_page.palette_saved.connect(
+            self.generate_output_page.refresh_default_exports_for_palette
+        )
 
         self.settings_page = SettingsPage(
             self.settings,
