@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -885,7 +885,23 @@ class PaletteLogicPage(QWidget):
             fallback = "engine/default" if key not in defaults else "built-in default"
             selector.addItem(f"No override ({fallback})", _NO_OVERRIDE)
             for code, display in _letter_options():
-                selector.addItem(display, code)
+                is_default = defaults.get(key) == code
+                label = f"{display} [Gleaner default]" if is_default else display
+                selector.addItem(label, code)
+                row_index = selector.count() - 1
+                selector.setItemData(
+                    row_index,
+                    QBrush(QColor(_COLOR_HEX[code])),
+                    Qt.ItemDataRole.ForegroundRole,
+                )
+                if is_default:
+                    default_font = QFont(self.font())
+                    default_font.setBold(True)
+                    selector.setItemData(
+                        row_index,
+                        default_font,
+                        Qt.ItemDataRole.FontRole,
+                    )
             selector.currentIndexChanged.connect(
                 lambda _index, combo=selector: self._palette_selector_changed(combo)
             )

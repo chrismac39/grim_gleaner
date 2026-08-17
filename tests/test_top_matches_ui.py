@@ -523,6 +523,12 @@ def test_palette_preview_updates_without_swatches_and_tracks_unsaved_changes(
     selector = page._selectors["rarity.rare"]
 
     assert all(selector.itemIcon(index).isNull() for index in range(selector.count()))
+    blue_index = selector.findData("b")
+    green_index = selector.findData("g")
+    assert selector.itemData(blue_index, Qt.ItemDataRole.ForegroundRole).color().name() == (
+        "#4e7bd6"
+    )
+    assert "[Gleaner default]" in selector.itemText(green_index)
     assert all(
         page.grade_style_selector.itemIcon(index).isNull()
         for index in range(page.grade_style_selector.count())
