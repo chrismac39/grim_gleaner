@@ -363,7 +363,6 @@ class MatchDetailPane(QFrame):
         )
         self.title.show()
 
-
 def _configure_table(table: QTableWidget, stretch_column: int) -> None:
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)

@@ -995,6 +995,7 @@ def test_skill_rank_and_modifier_rows_use_distinct_precedence_highlights() -> No
     )
     assert "Veteran's" not in affix_details
     assert "Remaining unmatched stats:\n- Movement Speed" in affix_details
+    assert "Remaining unmatched stats:\n- Movement Speed" in affix_details
     unmatched_section = affix_details.split("Remaining unmatched stats:\n", 1)[
         1
     ].split("\n\n", 1)[0]
