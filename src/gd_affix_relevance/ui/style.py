@@ -240,7 +240,6 @@ QTableWidget#uniqueSlotTable, QTableWidget#addonSlotTable {
     alternate-background-color: #1e2229;
     border: 1px solid #303540;
     gridline-color: #303540;
-    selection-background-color: #3a4454;
 }
 QFrame#slotFilterBar, QFrame#typeFilterBar, QFrame#affixSlotRow,
 QFrame#uniqueSlotRow, QFrame#addonSlotRow {

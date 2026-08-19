@@ -9,6 +9,7 @@ from PySide6.QtCore import QEvent, QObject, QSettings, QSignalBlocker, Qt, Signa
 from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QFrame,
@@ -375,7 +376,32 @@ def _configure_table(table: QTableWidget, stretch_column: int) -> None:
     header.setSectionResizeMode(stretch_column, QHeaderView.ResizeMode.Stretch)
 
 
-class AffixSlotTable(QTableWidget):
+class _SelectionAwareTable(QTableWidget):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        application = QApplication.instance()
+        if application is not None:
+            application.installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if (
+            event.type() == QEvent.Type.MouseButtonPress
+            and self.selectedItems()
+            and hasattr(event, "globalPosition")
+        ):
+            point = event.globalPosition().toPoint()
+            if not self.rect().contains(self.mapFromGlobal(point)):
+                self.clearSelection()
+                self.setCurrentItem(None)
+        return super().eventFilter(watched, event)
+
+    def focusOutEvent(self, event) -> None:  # noqa: N802
+        self.clearSelection()
+        self.setCurrentItem(None)
+        super().focusOutEvent(event)
+
+
+class AffixSlotTable(_SelectionAwareTable):
     match_selected = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -472,7 +498,7 @@ class AffixSlotRow(QFrame):
             self.tables[kind] = table
 
 
-class AddonSlotTable(QTableWidget):
+class AddonSlotTable(_SelectionAwareTable):
     match_selected = Signal(object)
 
     def __init__(
@@ -615,7 +641,7 @@ class AddonSlotRow(QFrame):
             self.tables[addon_type] = table
 
 
-class UniqueSlotTable(QTableWidget):
+class UniqueSlotTable(_SelectionAwareTable):
     match_selected = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:

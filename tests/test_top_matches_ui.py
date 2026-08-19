@@ -4,9 +4,9 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QEvent, QSettings
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QFocusEvent, QWheelEvent
 from PySide6.QtWidgets import QApplication, QFrame
 
 from gd_affix_relevance.catalog import (
@@ -981,6 +981,10 @@ def test_skill_rank_and_modifier_rows_use_distinct_precedence_highlights() -> No
     )
     affix_table.selectRow(0)
     app.processEvents()
+    assert affix_table.item(0, 0).foreground().color().name() != "#ffffff"
+    assert affix_table.item(0, 1).background().color().name() == (
+        SKILL_RANK_HIGHLIGHT.name()
+    )
     affix_details = window.top_matches_page.details.toPlainText()
     affix_match = affix_table.matches[0]
     assert window.top_matches_page.affix_detail_pane.title.text() == (
@@ -995,6 +999,12 @@ def test_skill_rank_and_modifier_rows_use_distinct_precedence_highlights() -> No
         1
     ].split("\n\n", 1)[0]
     assert "Health" not in unmatched_section
+    QApplication.sendEvent(
+        affix_table,
+        QFocusEvent(QEvent.Type.FocusOut),
+    )
+    assert not affix_table.selectedItems()
+    assert affix_table.currentItem() is None
 
     unique_table = window.top_matches_page.unique_tables["head"]
     rows = {
