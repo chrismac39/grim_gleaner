@@ -38,7 +38,7 @@ from gd_affix_relevance.slots import (
 from gd_affix_relevance.ui.main_window import MainWindow
 from gd_affix_relevance.ui.top_matches import (
     DETAIL_TITLE_COLORS,
-    SKILL_MODIFIER_HIGHLIGHT,
+    SKILL_BOTH_HIGHLIGHT,
     SKILL_RANK_HIGHLIGHT,
     SKILL_MODIFIER_STAT_COLOR,
     SKILL_RANK_STAT_COLOR,
@@ -973,7 +973,10 @@ def test_skill_rank_and_modifier_rows_use_distinct_precedence_highlights() -> No
     window.top_matches_page.minimum_grade.setCurrentText("B")
 
     affix_table = window.top_matches_page.tables[(SLOT_RING, "prefix")]
-    assert affix_table.item(0, 0).background().color().name() == (
+    assert affix_table.item(0, 0).background().color().name() != (
+        SKILL_RANK_HIGHLIGHT.name()
+    )
+    assert affix_table.item(0, 1).background().color().name() == (
         SKILL_RANK_HIGHLIGHT.name()
     )
     affix_table.selectRow(0)
@@ -1000,10 +1003,16 @@ def test_skill_rank_and_modifier_rows_use_distinct_precedence_highlights() -> No
     }
     assert unique_table.item(
         rows["Rank Crown"], 0
+    ).background().color().name() != SKILL_RANK_HIGHLIGHT.name()
+    assert unique_table.item(
+        rows["Rank Crown"], 1
     ).background().color().name() == SKILL_RANK_HIGHLIGHT.name()
     assert unique_table.item(
         rows["Modifier Crown"], 0
-    ).background().color().name() == SKILL_MODIFIER_HIGHLIGHT.name()
+    ).background().color().name() != SKILL_BOTH_HIGHLIGHT.name()
+    assert unique_table.item(
+        rows["Modifier Crown"], 1
+    ).background().color().name() == SKILL_BOTH_HIGHLIGHT.name()
 
     unique_table.selectRow(rows["Modifier Crown"])
     app.processEvents()

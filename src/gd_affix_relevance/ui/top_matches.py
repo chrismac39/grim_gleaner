@@ -76,19 +76,32 @@ from gd_affix_relevance.ui.settings import (
     GAME_FOLDER_SETTING,
 )
 from gd_affix_relevance.ui.widgets import StatRow
+from gd_affix_relevance.output import marker_palette_from_values
+from gd_affix_relevance.palette_config import default_palette, load_palette
 
 STAT_LABELS = {
     definition.stat_id: definition.label
     for definition in registered_stat_definitions()
 }
 RESULTS_PER_AFFIX_TABLE = 5
-SKILL_RANK_HIGHLIGHT = QColor("#8bded7")
-SKILL_MODIFIER_HIGHLIGHT = QColor("#66cdaa")
+SKILL_RANK_HIGHLIGHT = QColor("#f1b56a")
+SKILL_MODIFIER_HIGHLIGHT = QColor("#6a91e0")
+SKILL_BOTH_HIGHLIGHT = QColor("#bd94c6")
 HIGHLIGHT_TEXT = QColor("#102528")
 MATCHED_STAT_COLOR = "#82d99b"
 UNMATCHED_STAT_COLOR = "#b7bec9"
-SKILL_RANK_STAT_COLOR = "#8bded7"
-SKILL_MODIFIER_STAT_COLOR = "#66cdaa"
+SKILL_RANK_STAT_COLOR = "#f1b56a"
+SKILL_MODIFIER_STAT_COLOR = "#6a91e0"
+SKILL_BOTH_STAT_COLOR = "#bd94c6"
+PALETTE_CODE_HEX = {
+    "a": "#80ffd5", "b": "#4e7bd6", "c": "#00ffff", "d": "#4d4d4d",
+    "e": "#8f6b24", "f": "#ff69b5", "g": "#10eb5d", "h": "#f1b56a",
+    "i": "#6c6fe5", "j": "#4b4b4b", "k": "#f1e78c", "l": "#92cc00",
+    "m": "#800000", "n": "#4b4b4b", "o": "#f3a44d", "p": "#bd94c6",
+    "q": "#9d6b92", "r": "#ff4200", "s": "#c0c0c0", "t": "#00ffd2",
+    "u": "#4b4b4b", "v": "#4b4b4b", "w": "#ffffff", "x": "#1f6b3a",
+    "y": "#fff62c", "z": "#6a91e0",
+}
 STAT_CATEGORY_COLORS = {
     "elemental": "#f2d64b",
     "fire": "#ef922f",
@@ -215,18 +228,50 @@ def _has_selected_skill_bonus(
     )
 
 
-def _highlight_item(item: QTableWidgetItem, kind: str) -> None:
-    if kind == "modifier":
-        item.setBackground(SKILL_MODIFIER_HIGHLIGHT)
+def _highlight_item(
+    item: QTableWidgetItem,
+    kind: str,
+    *,
+    rank_highlight: QColor = SKILL_RANK_HIGHLIGHT,
+    modifier_highlight: QColor = SKILL_MODIFIER_HIGHLIGHT,
+    both_highlight: QColor = SKILL_BOTH_HIGHLIGHT,
+) -> None:
+    if kind == "both":
+        item.setBackground(both_highlight)
         item.setToolTip(
-            "Modifies an active build skill. Skill-modifier highlighting "
-            "supersedes bonus-rank highlighting."
+            "Includes bonus ranks for an active build skill and modifies that "
+            "active skill."
+        )
+    elif kind == "modifier":
+        item.setBackground(modifier_highlight)
+        item.setToolTip(
+            "Modifies an active build skill."
         )
     elif kind == "rank":
-        item.setBackground(SKILL_RANK_HIGHLIGHT)
+        item.setBackground(rank_highlight)
         item.setToolTip("Includes bonus ranks for an active build skill.")
     if kind:
         item.setForeground(HIGHLIGHT_TEXT)
+
+
+def _grade_color(marker: str, colors: dict[str, QColor]) -> QColor | None:
+    upper = marker.upper()
+    for token in ("S++", "S+", "S", "A", "B", "C", "D", "F"):
+        if token in upper:
+            return colors.get(token)
+    return None
+
+
+def _set_table_item_color(
+    item: QTableWidgetItem,
+    column: int,
+    marker: str,
+    grade_colors: dict[str, QColor] | None,
+) -> None:
+    if column == 0 and grade_colors:
+        color = _grade_color(marker, grade_colors)
+        if color is not None:
+            item.setForeground(color)
 
 
 def _html_line(text: str, *, color: str = "", bold: bool = False) -> str:
@@ -348,6 +393,10 @@ class AffixSlotTable(QTableWidget):
         self,
         matches: tuple[RankedAffixVariant, ...],
         profile: BuildProfile | None = None,
+        grade_colors: dict[str, QColor] | None = None,
+        rank_highlight: QColor = SKILL_RANK_HIGHLIGHT,
+        modifier_highlight: QColor = SKILL_MODIFIER_HIGHLIGHT,
+        both_highlight: QColor = SKILL_BOTH_HIGHLIGHT,
     ) -> None:
         self._updating = True
         self.matches = matches
@@ -371,7 +420,15 @@ class AffixSlotTable(QTableWidget):
                 item = QTableWidgetItem(value)
                 if column != 1:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                _highlight_item(item, highlight)
+                if column != 0:
+                    _highlight_item(
+                        item,
+                        highlight,
+                        rank_highlight=rank_highlight,
+                        modifier_highlight=modifier_highlight,
+                        both_highlight=both_highlight,
+                    )
+                _set_table_item_color(item, column, match.marker, grade_colors)
                 self.setItem(row, column, item)
         self._updating = False
 
@@ -447,6 +504,10 @@ class AddonSlotTable(QTableWidget):
         self,
         matches: tuple[RankedAddonVariant, ...],
         profile: BuildProfile | None = None,
+        grade_colors: dict[str, QColor] | None = None,
+        rank_highlight: QColor = SKILL_RANK_HIGHLIGHT,
+        modifier_highlight: QColor = SKILL_MODIFIER_HIGHLIGHT,
+        both_highlight: QColor = SKILL_BOTH_HIGHLIGHT,
     ) -> None:
         self._updating = True
         self.matches = matches
@@ -458,7 +519,9 @@ class AddonSlotTable(QTableWidget):
                 match.semantic_stat_ids, profile
             )
             highlight = (
-                "modifier"
+                "both"
+                if has_rank_bonus and match.has_selected_skill_modifier
+                else "modifier"
                 if match.has_selected_skill_modifier
                 else "rank" if has_rank_bonus else ""
             )
@@ -496,7 +559,15 @@ class AddonSlotTable(QTableWidget):
                 item = QTableWidgetItem(value)
                 if column != 1:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                _highlight_item(item, highlight)
+                if column != 0:
+                    _highlight_item(
+                        item,
+                        highlight,
+                        rank_highlight=rank_highlight,
+                        modifier_highlight=modifier_highlight,
+                        both_highlight=both_highlight,
+                    )
+                _set_table_item_color(item, column, match.marker, grade_colors)
                 self.setItem(row, column, item)
         self._updating = False
 
@@ -564,6 +635,10 @@ class UniqueSlotTable(QTableWidget):
         self,
         matches: tuple[RankedItemVariant, ...],
         profile: BuildProfile | None = None,
+        grade_colors: dict[str, QColor] | None = None,
+        rank_highlight: QColor = SKILL_RANK_HIGHLIGHT,
+        modifier_highlight: QColor = SKILL_MODIFIER_HIGHLIGHT,
+        both_highlight: QColor = SKILL_BOTH_HIGHLIGHT,
     ) -> None:
         self._updating = True
         self.matches = matches
@@ -575,7 +650,9 @@ class UniqueSlotTable(QTableWidget):
                 match.semantic_stat_ids, profile
             )
             highlight = (
-                "modifier"
+                "both"
+                if has_rank_bonus and match.has_selected_skill_modifier
+                else "modifier"
                 if match.has_selected_skill_modifier
                 else "rank" if has_rank_bonus else ""
             )
@@ -591,7 +668,15 @@ class UniqueSlotTable(QTableWidget):
                 item = QTableWidgetItem(value)
                 if column != 1:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                _highlight_item(item, highlight)
+                if column != 0:
+                    _highlight_item(
+                        item,
+                        highlight,
+                        rank_highlight=rank_highlight,
+                        modifier_highlight=modifier_highlight,
+                        both_highlight=both_highlight,
+                    )
+                _set_table_item_color(item, column, match.marker, grade_colors)
                 self.setItem(row, column, item)
         visible_rows = max(1, min(len(matches), 12))
         self.setFixedHeight(58 + visible_rows * 26)
@@ -644,6 +729,10 @@ class TopMatchesPage(QWidget):
         self.profile = profile
         self.catalog_status = catalog_status
         self.settings = settings
+        self.grade_colors: dict[str, QColor] = {}
+        self.skill_rank_highlight = SKILL_RANK_HIGHLIGHT
+        self.skill_modifier_highlight = SKILL_MODIFIER_HIGHLIGHT
+        self.skill_both_highlight = SKILL_BOTH_HIGHLIGHT
         skill_catalog = skills or SkillCatalog(())
         self.skill_labels = {
             skill.skill_id: skill.display_name
@@ -744,13 +833,17 @@ class TopMatchesPage(QWidget):
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
 
-        highlight_legend = QLabel(
-            "Pale turquoise: +ranks to active skills    "
-            "Aquamarine: active-skill modifier",
+        self.highlight_legend = QLabel(
             self,
         )
-        highlight_legend.setObjectName("matchHighlightLegend")
-        layout.addWidget(highlight_legend)
+        self.highlight_legend.setTextFormat(Qt.TextFormat.RichText)
+        self.highlight_legend.setText(
+            "<span style='color: #f1b56a;'>+Ranks to active skills</span>    "
+            "<span style='color: #6a91e0;'>Active-skill modifier</span>    "
+            "<span style='color: #bd94c6;'>Both</span>"
+        )
+        self.highlight_legend.setObjectName("matchHighlightLegend")
+        layout.addWidget(self.highlight_legend)
 
         filter_frame = QFrame(self)
         filter_frame.setObjectName("slotFilterBar")
@@ -783,6 +876,44 @@ class TopMatchesPage(QWidget):
         self._align_control_row_labels()
         self._update_loaded_profile_pill()
         self.refresh_version_blurb()
+        self.refresh_palette_colors()
+        self.refresh()
+
+    def refresh_palette_colors(self) -> None:
+        values = default_palette()
+        if self.settings is not None:
+            raw = self.settings.value("paths/palette_file", "", type=str).strip()
+            if raw:
+                try:
+                    values = load_palette(Path(raw)).values
+                except (OSError, ValueError):
+                    pass
+        palette = marker_palette_from_values(values)
+        self.grade_colors = {
+            token: QColor(PALETTE_CODE_HEX.get(code, "#ffffff"))
+            for token, code in palette.grade_color_codes.items()
+        }
+        self.skill_rank_highlight = QColor(
+            PALETTE_CODE_HEX.get(values.get("ui.skill_rank", "h"), "#f1b56a")
+        )
+        self.skill_modifier_highlight = QColor(
+            PALETTE_CODE_HEX.get(values.get("ui.skill_modifier", "z"), "#6a91e0")
+        )
+        self.skill_both_highlight = QColor(
+            PALETTE_CODE_HEX.get(values.get("ui.skill_both", "p"), "#bd94c6")
+        )
+        if hasattr(self, "highlight_legend"):
+            self.highlight_legend.setText(
+                f"<span style='color: {self.skill_rank_highlight.name()};'>"
+                "+Ranks to active skills</span>    "
+                f"<span style='color: {self.skill_modifier_highlight.name()};'>"
+                "Active-skill modifier</span>    "
+                f"<span style='color: {self.skill_both_highlight.name()};'>"
+                "Both</span>"
+            )
+
+    def refresh_palette(self) -> None:
+        self.refresh_palette_colors()
         self.refresh()
 
     def _align_control_row_labels(self) -> None:
@@ -1237,7 +1368,14 @@ class TopMatchesPage(QWidget):
                 kind=kind,
                 limit=RESULTS_PER_AFFIX_TABLE,
             )
-            table.set_matches(matches, self.profile)
+            table.set_matches(
+                matches,
+                self.profile,
+                self.grade_colors,
+                self.skill_rank_highlight,
+                self.skill_modifier_highlight,
+                self.skill_both_highlight,
+            )
             all_affixes.extend(matches)
         self.matches = tuple(all_affixes)
         self._refresh_uniques()
@@ -1284,7 +1422,14 @@ class TopMatchesPage(QWidget):
                 enabled_types=enabled_types,
                 minimum_grade=self.minimum_grade.currentText(),
             )
-            table.set_matches(matches, self.profile)
+            table.set_matches(
+                matches,
+                self.profile,
+                self.grade_colors,
+                self.skill_rank_highlight,
+                self.skill_modifier_highlight,
+                self.skill_both_highlight,
+            )
             all_matches.extend(matches)
         self.unique_matches = tuple(all_matches)
 
@@ -1303,7 +1448,14 @@ class TopMatchesPage(QWidget):
                     else None
                 ),
             )
-            table.set_matches(matches, self.profile)
+            table.set_matches(
+                matches,
+                self.profile,
+                self.grade_colors,
+                self.skill_rank_highlight,
+                self.skill_modifier_highlight,
+                self.skill_both_highlight,
+            )
             all_matches.extend(matches)
         self.addon_matches = tuple(all_matches)
 

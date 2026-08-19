@@ -214,6 +214,9 @@ class MainWindow(QMainWindow):
         self.palette_logic_page.palette_saved.connect(
             self.generate_output_page.refresh_default_exports_for_palette
         )
+        self.palette_logic_page.palette_saved.connect(
+            self.top_matches_page.refresh_palette
+        )
 
         self.settings_page = SettingsPage(
             self.settings,

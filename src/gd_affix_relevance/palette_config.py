@@ -28,6 +28,10 @@ DEFAULT_PALETTE: dict[str, str] = {
     "nondamage.attribute0": "h",
     "nondamage.mastery_increment": "t",
     "nondamage.all_skill_increment": "t",
+    # UI-only highlight colors for the Gear Grades page.
+    "ui.skill_rank": "h",
+    "ui.skill_modifier": "z",
+    "ui.skill_both": "p",
     # Export-only controls for grade marker insertion.
     "marker.generated": "c",
     "marker.default": "e",
@@ -64,6 +68,9 @@ KNOWN_KEYS = frozenset(
         "nondamage.attribute0",
         "nondamage.mastery_increment",
         "nondamage.all_skill_increment",
+        "ui.skill_rank",
+        "ui.skill_modifier",
+        "ui.skill_both",
         "nondamage.run_speed",
         "nondamage.cast_speed",
         "nondamage.attack_speed",

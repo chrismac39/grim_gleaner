@@ -158,6 +158,14 @@ _SECTION_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
+        "Gear Grades highlights",
+        (
+            "ui.skill_rank",
+            "ui.skill_modifier",
+            "ui.skill_both",
+        ),
+    ),
+    (
         "Gear Grade marker",
         (
             "marker.generated",
@@ -202,6 +210,9 @@ _SECTION_HELP: dict[str, str] = {
 }
 
 _FIELD_HELP: dict[str, str] = {
+    "ui.skill_rank": "Highlight color for bonus ranks to active skills on the Gear Grades page.",
+    "ui.skill_modifier": "Highlight color for active-skill modifiers on the Gear Grades page.",
+    "ui.skill_both": "Highlight color when a result has both active-skill ranks and an active-skill modifier.",
     "marker.generated": (
         "Fallback annotation color for generated Gear Grade tags. "
         "Used whenever a specific grade color is not overridden."
